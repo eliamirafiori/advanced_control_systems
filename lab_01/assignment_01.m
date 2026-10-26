@@ -38,12 +38,15 @@ DH_table = [q1      0   0     0;
             0       q2  a2  -pi/2;
             0       q3  0     pi/2];
          
-%% Direct Kinematics
+%% Direct Kinematics - Manual
+
+fprintf('\n########### Direct Kinematics - Manual ###########\n');
+
 A01 = subs(A,[d theta a alpha],DH_table(1,:));
 A12 = subs(A,[d theta a alpha],DH_table(2,:));
 A23 = subs(A,[d theta a alpha],DH_table(3,:));
     
-%% Transform the T matrix according to base frame and EE frame
+% Transform the T matrix according to base frame and EE frame
 Ab0 = [ 1 0 0  0;
         0 1 0  0;
         0 0 1 0.65; % 0.15 from base + 0.50 from link 1 length
@@ -60,8 +63,9 @@ Tbe = Ab0 * T03 * A3e;
 fprintf("Tbe matrix:\n");
 disp(simplify(Tbe));
 
-%% Built-in MATLAB FK comparison
+%% Direct Kinematics - Comparison
 
+fprintf('\n########### Direct Kinematics - Built-In ###########\n');
 fprintf('Base frame: %s\n', baseName);
 fprintf('End-effector body: %s\n', eeName);
 
@@ -102,7 +106,9 @@ else
     fprintf('FK CROSS-CHECK: DIFFER\n');
 end
 
-%% Inverse Kinematics
+%% Inverse Kinematics - Manual
+
+fprintf('\n########### Inverse Kinematics - Manual ###########\n');
 
 syms px_d py_d pz_d real
 
@@ -133,7 +139,9 @@ disp(q1Sol_2);
 disp(q2Sol);
 disp(q3Sol_2);
 
-%% Built-in MATLAB IK comparison
+%% Inverse Kinematics - Comparison
+
+fprintf('\n########### Inverse Kinematics - Comparison ###########\n');
 
 % Desired end-effector position
 % Choose a reachable target in the same frame as Tbe
@@ -175,8 +183,6 @@ weights = [0 0 0 1 1 1];
 
 % Store built-in IK results
 q_builtin_ik = zeros(2,3);
-
-fprintf('\n========== IK CROSS-CHECK ==========\n');
 
 for k = 1:2
 
@@ -265,3 +271,83 @@ for k = 1:2
 end
 
 drawnow;
+
+%% Geometric Jacobian [P R R] - Manual
+
+fprintf('\n########### Geometric Jacobian [P R R] - Manual ###########\n');
+
+s = @(w) [ 0    -w(3)  w(2);
+           w(3)  0    -w(1);
+          -w(2)  w(1)  0];
+
+pe = Tbe(1:3, 4);
+
+% Joint 1 - Prismatic
+z0 = Ab0(1:3, 3);
+p0 = Ab0(1:3, 4);
+
+% Joint 2 - Revolut
+Ab1 = Ab0*A01;
+z1 = Ab1(1:3, 3);
+p1 = Ab1(1:3, 4);
+
+% Joint 3 - Revolut
+Ab2 = Ab0*A01*A12;
+z2 = Ab2(1:3, 3);
+p2 = Ab2(1:3, 4);
+
+% Assemble the geometric Jacobian columns
+JGv = [z0, cross(z1, pe - p1), cross(z2, pe - p2)];
+JGv_a = [z0, s(z1)*(pe - p1), s(z2)*(pe - p2)]; % Alternative with Skew matrix
+JGw = [zeros(3,1), z1, z2];
+JG = [JGv; JGw];
+
+disp('Geometric Jacobian:');
+disp(simplify(JG));
+
+%% Geometric Jacobian [P R R] - Comparison
+
+fprintf('\n########### Geometric Jacobian Comparison ###########\n');
+
+% Evaluate manual Jacobian at the first analytical IK solution
+qJacobian = [q1v(1), q2v, q3v(1)];
+
+% Substitute joint values into the symbolic manual Jacobian
+JG_manual_sym = subs(JG, ...
+    [q1, q2, q3], qJacobian);
+
+JG_manual = double(JG_manual_sym);
+
+% MATLAB built-in geometric Jacobian
+J_builtin = geometricJacobian(robot, qJacobian, eeName);
+
+% MATLAB ordering: [Jw; Jv]
+% Manual ordering: [Jv; Jw]
+JG_manual_matlab_order = [JG_manual(4:6,:); JG_manual(1:3,:)];
+
+% Compare Jacobians
+J_error = JG_manual_matlab_order - J_builtin;
+
+max_J_error = max(abs(J_error(:)));
+linear_error = norm(JG_manual_matlab_order(4:6,:) ...
+    - J_builtin(4:6,:), 'fro');
+angular_error = norm(JG_manual_matlab_order(1:3,:) ...
+    - J_builtin(1:3,:), 'fro');
+
+fprintf('\nManual Jacobian:\n');
+disp(JG_manual_matlab_order);
+
+fprintf('Built-in Jacobian:\n');
+disp(J_builtin);
+
+fprintf('Maximum absolute error: %.3e\n', max_J_error);
+fprintf('Linear Jacobian error:  %.3e\n', linear_error);
+fprintf('Angular Jacobian error: %.3e\n', angular_error);
+
+tol_J = 1e-9;
+
+if max_J_error < tol_J
+    fprintf('GEOMETRIC JACOBIAN CROSS-CHECK: MATCH\n');
+else
+    fprintf('GEOMETRIC JACOBIAN CROSS-CHECK: DIFFER\n');
+end
