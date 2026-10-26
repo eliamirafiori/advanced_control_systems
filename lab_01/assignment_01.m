@@ -351,3 +351,101 @@ if max_J_error < tol_J
 else
     fprintf('GEOMETRIC JACOBIAN CROSS-CHECK: DIFFER\n');
 end
+
+
+%% Analytical Jacobian - Manual (ZYZ Euler angles)
+
+fprintf('\n########### Analytical Jacobian - Manual (ZYZ) ###########\n');
+
+pe = Tbe(1:3, 4);
+Rbe = Tbe(1:3, 1:3);
+
+% ZYZ Euler angles
+phi_euler = atan2(Rbe(2,3), Rbe(1,3));
+
+theta_euler = atan2( ...
+    sqrt(Rbe(1,3)^2 + Rbe(2,3)^2), ...
+    Rbe(3,3));
+
+psi_euler = atan2(Rbe(3,2), -Rbe(3,1));
+
+euler_angles = [phi_euler; theta_euler; psi_euler];
+
+% Translational analytical Jacobian
+JAv = [diff(pe, q1), diff(pe, q2), diff(pe, q3)];
+JAv = jacobian(pe, [q1, q2, q3]);
+
+% Euler-angle-rate Jacobian
+JAw = [diff(euler_angles, q1), diff(euler_angles, q2), diff(euler_angles, q3)];
+JAw = jacobian(euler_angles, [q1, q2, q3]);
+
+% Complete analytical Jacobian
+JA = simplify([JAv; JAw]);
+
+disp('ZYZ Euler angles:');
+disp(simplify(euler_angles));
+
+disp('Analytical Jacobian (ZYZ):');
+disp(JA);
+
+%% Analytical Jacobian [P R R] - Comparison (ZYZ Euler Angles)
+
+fprintf('\n########### Analytical Jacobian - Comparison (ZYZ) ###########\n');
+
+% Evaluate manual Jacobian at the first analytical IK solution
+qJacobian = [q1v(1), q2v, q3v(1)];
+
+% Substitute joint values into the symbolic analytical Jacobian
+JA_manual_sym = subs(JA, [q1, q2, q3], qJacobian);
+JA_manual = double(JA_manual_sym);
+
+% MATLAB built-in geometric Jacobian
+J_builtin = geometricJacobian(robot, qJacobian, eeName);
+
+% MATLAB ordering: [Jw; Jv]
+Jw_builtin = J_builtin(1:3,:);
+Jv_builtin = J_builtin(4:6,:);
+
+% Evaluate ZYZ Euler angles at this configuration
+R_test = double(subs(Rbe, [q1, q2, q3], qJacobian));
+
+phi_test = atan2(R_test(2,3), R_test(1,3));
+theta_test = atan2(sqrt(R_test(1,3)^2 + R_test(2,3)^2), ...
+    R_test(3,3));
+
+% Convert spatial angular velocity to ZYZ Euler angle rates
+% omega = E * [phi_dot; theta_dot; psi_dot]
+
+E = [0, -sin(phi_test), cos(phi_test)*sin(theta_test);
+    0,  cos(phi_test), sin(phi_test)*sin(theta_test);
+    1,  0,             cos(theta_test)];
+
+J_euler_builtin = E \ Jw_builtin;
+
+% Reorder built-in Jacobian to [Jv; Euler angle rates]
+JA_builtin = [Jv_builtin; J_euler_builtin];
+
+% Compare Jacobians
+J_error = JA_manual - JA_builtin;
+
+max_J_error = max(abs(J_error(:)));
+linear_error = norm(JA_manual(1:3,:) - JA_builtin(1:3,:), 'fro');
+angular_error = norm(JA_manual(4:6,:) - JA_builtin(4:6,:), 'fro');
+
+fprintf('\nManual Analytical Jacobian (ZYZ):\n');
+disp(JA_manual);
+
+fprintf('Built-in Jacobian converted to ZYZ Euler rates:\n');
+disp(JA_builtin);
+
+fprintf('Maximum absolute error: %.3e\n', max_J_error);
+fprintf('Linear Jacobian error:  %.3e\n', linear_error);
+fprintf('Euler-rate Jacobian error: %.3e\n', angular_error);
+
+tol_J = 1e-9;
+
+if max_J_error < tol_J
+    fprintf('ANALYTICAL JACOBIAN CROSS-CHECK: MATCH\n');
+else
+    fprintf('ANALYTICAL JACOBIAN CROSS-CHECK: DIFFER\n');
+end
