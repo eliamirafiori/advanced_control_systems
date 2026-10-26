@@ -1,0 +1,12 @@
+robot = importrobot('filename.urdf');
+showdetails(robot)
+
+figure;
+config = homeConfiguration(robot);
+show(robot,config);
+
+config(1).JointPosition = INSERT_VALUE; 
+config(2).JointPosition = INSERT_VALUE;
+config(3).JointPosition = INSERT_VALUE;
+
+show(robot,config);
