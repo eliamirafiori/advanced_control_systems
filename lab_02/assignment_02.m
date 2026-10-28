@@ -352,18 +352,254 @@ else
     fprintf('GEOMETRIC JACOBIAN CROSS-CHECK: DIFFER\n');
 end
 
-%% Analytical Jacobian - Mnaual
 
-fprintf('\n########### Analytical Jacobian - Manual ###########\n');
+%% Analytical Jacobian - Manual (ZYZ Euler angles)
 
-pe = Tbe(1:3, 4); % 
-Rbe = Tbe(1:3, 1:3); % 
+fprintf('\n########### Analytical Jacobian - Manual (ZYZ) ###########\n');
 
-phi_euler = atan2(Rbe(2, 3), Rbe(1, 3));
-theta_eulwe = atan2(sqrt(Rbe(1, 3)^2, Rbe(2, 3)^2), Rbe(3, 3));
-psi_euler = atan2(Rbe(3, 2), -Rbe(3, 1));
+pe = Tbe(1:3, 4);
+Rbe = Tbe(1:3, 1:3);
 
+% ZYZ Euler angles
+phi_euler = atan2(Rbe(2,3), Rbe(1,3));
 
+theta_euler = atan2( ...
+    sqrt(Rbe(1,3)^2 + Rbe(2,3)^2), ...
+    Rbe(3,3));
 
-JAv = [diff(pe, q1), diff(pe, q2, diff(pe, q3))];
-JAw = [];
+psi_euler = atan2(Rbe(3,2), -Rbe(3,1));
+
+euler_angles = [phi_euler; theta_euler; psi_euler];
+
+% Translational analytical Jacobian
+JAv = [diff(pe, q1), diff(pe, q2), diff(pe, q3)];
+JAv = jacobian(pe, [q1, q2, q3]);
+
+% Euler-angle-rate Jacobian
+JAw = [diff(euler_angles, q1), diff(euler_angles, q2), diff(euler_angles, q3)];
+JAw = jacobian(euler_angles, [q1, q2, q3]);
+
+% Complete analytical Jacobian
+JA = simplify([JAv; JAw]);
+
+disp('ZYZ Euler angles:');
+disp(simplify(euler_angles));
+
+disp('Analytical Jacobian (ZYZ):');
+disp(JA);
+
+%% Analytical Jacobian [P R R] - Comparison (ZYZ Euler Angles)
+
+fprintf('\n########### Analytical Jacobian - Comparison (ZYZ) ###########\n');
+
+% Evaluate manual Jacobian at the first analytical IK solution
+qJacobian = [q1v(1), q2v, q3v(1)];
+
+% Substitute joint values into the symbolic analytical Jacobian
+JA_manual_sym = subs(JA, [q1, q2, q3], qJacobian);
+JA_manual = double(JA_manual_sym);
+
+% MATLAB built-in geometric Jacobian
+J_builtin = geometricJacobian(robot, qJacobian, eeName);
+
+% MATLAB ordering: [Jw; Jv]
+Jw_builtin = J_builtin(1:3,:);
+Jv_builtin = J_builtin(4:6,:);
+
+% Evaluate ZYZ Euler angles at this configuration
+R_test = double(subs(Rbe, [q1, q2, q3], qJacobian));
+
+phi_test = atan2(R_test(2,3), R_test(1,3));
+theta_test = atan2(sqrt(R_test(1,3)^2 + R_test(2,3)^2), ...
+    R_test(3,3));
+
+% Convert spatial angular velocity to ZYZ Euler angle rates
+% omega = E * [phi_dot; theta_dot; psi_dot]
+
+E = [0, -sin(phi_test), cos(phi_test)*sin(theta_test);
+    0,  cos(phi_test), sin(phi_test)*sin(theta_test);
+    1,  0,             cos(theta_test)];
+
+J_euler_builtin = E \ Jw_builtin;
+
+% Reorder built-in Jacobian to [Jv; Euler angle rates]
+JA_builtin = [Jv_builtin; J_euler_builtin];
+
+% Compare Jacobians
+J_error = JA_manual - JA_builtin;
+
+max_J_error = max(abs(J_error(:)));
+linear_error = norm(JA_manual(1:3,:) - JA_builtin(1:3,:), 'fro');
+angular_error = norm(JA_manual(4:6,:) - JA_builtin(4:6,:), 'fro');
+
+fprintf('\nManual Analytical Jacobian (ZYZ):\n');
+disp(JA_manual);
+
+fprintf('Built-in Jacobian converted to ZYZ Euler rates:\n');
+disp(JA_builtin);
+
+fprintf('Maximum absolute error: %.3e\n', max_J_error);
+fprintf('Linear Jacobian error:  %.3e\n', linear_error);
+fprintf('Euler-rate Jacobian error: %.3e\n', angular_error);
+
+tol_J = 1e-9;
+
+if max_J_error < tol_J
+    fprintf('ANALYTICAL JACOBIAN CROSS-CHECK: MATCH\n');
+else
+    fprintf('ANALYTICAL JACOBIAN CROSS-CHECK: DIFFER\n');
+end
+
+%% Kinetic and Potential Energy - Manual
+
+fprintf('\n########### Kinetic and Potential Energy - Manual ###########\n');
+
+% Generalized coordinates and velocities
+q = [q1; q2; q3];
+syms dq1 dq2 dq3 real
+dq = [dq1; dq2; dq3];
+
+% Gravity expressed in the base frame
+syms g real
+g0 = [0; 0; -g];
+
+% Link masses
+syms m1 m2 m3 real
+m = [m1; m2; m3];
+
+% Center of mass coordinates expressed in each link frame.
+% These parameters must be set according to the robot/URDF data.
+syms xc1 yc1 zc1 xc2 yc2 zc2 xc3 yc3 zc3 real
+pC1_local = [xc1; yc1; zc1];
+pC2_local = [xc2; yc2; zc2];
+pC3_local = [xc3; yc3; zc3];
+
+% Inertia tensors about each link's center of mass, expressed in its
+% own link frame. Full symmetric tensors are used (no diagonal assumption).
+syms I1xx I1yy I1zz I1xy I1xz I1yz real
+syms I2xx I2yy I2zz I2xy I2xz I2yz real
+syms I3xx I3yy I3zz I3xy I3xz I3yz real
+
+IC1 = [ I1xx I1xy I1xz;
+        I1xy I1yy I1yz;
+        I1xz I1yz I1zz];
+
+IC2 = [ I2xx I2xy I2xz;
+        I2xy I2yy I2yz;
+        I2xz I2yz I2zz];
+
+IC3 = [ I3xx I3xy I3xz;
+        I3xy I3yy I3yz;
+        I3xz I3yz I3zz];
+
+%% Link transformations (base frame to each link frame)
+
+Tb1 = Ab0*A01;
+Tb2 = Ab0*A01*A12;
+Tb3 = Ab0*A01*A12*A23;
+
+Tb = {Tb1, Tb2, Tb3};
+pC_local = {pC1_local, pC2_local, pC3_local};
+IC_local = {IC1, IC2, IC3};
+
+% Joint axes and origins expressed in the base frame.
+% Joint 1 is prismatic; joints 2 and 3 are revolute.
+z0 = Ab0(1:3,3);
+p0 = Ab0(1:3,4);
+
+Ab1 = Ab0*A01;
+z1 = Ab1(1:3,3);
+p1 = Ab1(1:3,4);
+
+Ab2 = Ab0*A01*A12;
+z2 = Ab2(1:3,3);
+p2 = Ab2(1:3,4);
+
+%% Center of mass positions and Jacobians
+
+pC = cell(1,3);
+JP_C = cell(1,3);
+JO_C = cell(1,3);
+I_C_base = cell(1,3);
+T_link = sym(zeros(1,3));
+U_link = sym(zeros(1,3));
+
+for i = 1:3
+
+    % Center of mass position expressed in the base frame
+    Ri = Tb{i}(1:3,1:3);
+    pi = Tb{i}(1:3,4);
+    pC{i} = simplify(Ri*pC_local{i} + pi);
+
+    % Linear Jacobian of the link center of mass
+    JP_C{i} = simplify(jacobian(pC{i}, q));
+
+    % Angular Jacobian of each link
+    if i == 1
+        JO_C{i} = [zeros(3,1), zeros(3,1), zeros(3,1)];
+    elseif i == 2
+        JO_C{i} = [zeros(3,1), z1, zeros(3,1)];
+    else
+        JO_C{i} = [zeros(3,1), z1, z2];
+    end
+
+    % Inertia tensor about the center of mass, expressed in the base frame
+    I_C_base{i} = simplify(Ri*IC_local{i}*Ri.');
+
+    % Link kinetic energy:
+    % T_i = 1/2*m_i*v_C_i'*v_C_i + 1/2*omega_i'*I_i_base*omega_i
+    T_link(i) = simplify( ...
+        1/2*m(i)*(dq.'*JP_C{i}.'*JP_C{i}*dq) + ...
+        1/2*(dq.'*JO_C{i}.'*I_C_base{i}*JO_C{i}*dq));
+
+    % Link gravitational potential energy: U_i = -m_i*g0'*p_C_i
+    U_link(i) = simplify(-m(i)*g0.'*pC{i});
+end
+
+%% Total kinetic and potential energy
+
+T = simplify(sum(T_link));
+U = simplify(sum(U_link));
+
+% Inertia matrix B(q), such that T(q,dq) = 1/2*dq'*B(q)*dq
+B = simplify(jacobian(jacobian(T, dq).', dq));
+
+fprintf('\nCenter of mass positions in the base frame:\n');
+for i = 1:3
+    fprintf('pC%d =\n', i);
+    disp(pC{i});
+end
+
+fprintf('\nLinear Jacobians of the centers of mass:\n');
+for i = 1:3
+    fprintf('JP_C%d =\n', i);
+    disp(JP_C{i});
+end
+
+fprintf('\nAngular Jacobians of the links:\n');
+for i = 1:3
+    fprintf('JO_C%d =\n', i);
+    disp(JO_C{i});
+end
+
+fprintf('\nKinetic energy of each link:\n');
+disp(T_link.');
+
+fprintf('Total kinetic energy T(q,dq):\n');
+disp(T);
+
+fprintf('Inertia matrix B(q), with T = 1/2*dq''*B(q)*dq:\n');
+disp(B);
+
+fprintf('\nPotential energy of each link:\n');
+disp(U_link.');
+
+fprintf('Total potential energy U(q):\n');
+disp(U);
+
+% Symbolic consistency checks
+fprintf('\nInertia matrix symmetry check (should be zero):\n');
+disp(simplify(B - B.'));
+
+fprintf('Kinetic energy quadratic-form check (should be zero):\n');
+disp(simplify(T - 1/2*dq.'*B*dq));

@@ -1,0 +1,277 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[a4paper, margin=2.2cm]{geometry}
+\usepackage{fontspec}
+\usepackage[english, bidi=basic, provide=*]{babel}
+\babelprovide[import, onchar=ids fonts]{english}
+\babelfont{rm}{Noto Sans}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\title{\textbf{Advanced Control Systems --- Assignment 1\\Kinematic Modeling and Differential Analysis of a PRR Manipulator}}
+\author{Student ID: [Your Student ID] \quad | \quad Name: [Your Name]}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents the kinematic and differential modeling of a 3-DOF serial manipulator with a Prismatic-Revolute-Revolute ($\mathrm{PRR}$) kinematic configuration. The Denavit-Hartenberg (DH) convention is applied to derive the Direct (Forward) Kinematics. An analytical solution for the Inverse Kinematics is established, examining why two distinct operational branches naturally arise. Furthermore, both the Geometric and Analytical (ZYZ Euler angles) Jacobians are formulated, compared, and cross-validated against numerical routines implemented in MATLAB.
+\end{abstract}
+
+% --------------------------------------------------
+\section{Manipulator Architecture and Kinematic Diagram}
+% --------------------------------------------------
+The robotic system consists of:
+\begin{itemize}
+    \item \textbf{Joint 1 (Prismatic, $q_1$):} Translates vertically along the base axis $\mathbf{z}_0$.
+    \item \textbf{Joint 2 (Revolute, $q_2$):} Rotates about the vertical axis $\mathbf{z}_1$, establishing planar azimuthal sweeping in the $XY$ plane.
+    \item \textbf{Joint 3 (Revolute, $q_3$):} Rotates about a horizontal axis $\mathbf{z}_2$, elevating or depressing the terminal link.
+\end{itemize}
+
+Figure~\ref{fig:prr_schematic} shows the kinematic diagram of the PRR manipulator with assigned frames and relevant link offsets: $a_1 = 0.50\,\text{m}$, $a_2 = 0.40\,\text{m}$, and terminal link $a_3 = 0.40\,\text{m}$, mounted on a base pedestal of height $h_{\text{base}} = 0.15\,\text{m}$.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>=Stealth, thick, scale=1.1, every node/.style={font=\small}]
+    % Base ground line and solid foundation
+    \draw[line width=1.5pt] (-1.2,0) -- (1.2,0);
+    \fill[gray!20] (-1.2,-0.25) rectangle (1.2,0);
+    \draw[line width=0.6pt, color=gray!80] (-1.0,-0.25) -- (-0.8,0);
+    \draw[line width=0.6pt, color=gray!80] (-0.6,-0.25) -- (-0.4,0);
+    \draw[line width=0.6pt, color=gray!80] (-0.2,-0.25) -- (0,0);
+    \draw[line width=0.6pt, color=gray!80] (0.2,-0.25) -- (0.4,0);
+    \draw[line width=0.6pt, color=gray!80] (0.6,-0.25) -- (0.8,0);
+    \draw[line width=0.6pt, color=gray!80] (1.0,-0.25) -- (1.2,0);
+    \draw[fill=gray!35, draw=black] (-0.35,0) rectangle (0.35,0.7);
+    \node at (0,0.35) {Base};
+
+    % Frame 0
+    \coordinate (O0) at (0, 0.7);
+    \draw[->, red, line width=1pt] (O0) -- ++(0, 1.0) node[above] {$\mathbf{z}_0$};
+    \draw[->, blue, line width=1pt] (O0) -- ++(1.0, 0) node[right] {$\mathbf{x}_0$};
+    \filldraw (O0) circle (2pt) node[below left] {$O_0$};
+
+    % Prismatic joint column (Joint 1)
+    \draw[dashed] (0, 0.7) -- (0, 2.5);
+    \draw[fill=blue!10, draw=blue!70!black] (-0.3, 1.3) rectangle (0.3, 2.2);
+    \node[right=5pt] at (0.3, 1.75) {Joint 1: Prismatic ($q_1$)};
+    \draw[<->, double, thick, blue!80!black] (-0.5, 1.2) -- (-0.5, 2.3) node[midway, left] {$d_1 = q_1$};
+
+    % Joint 2 (Revolute)
+    \coordinate (O1) at (0, 2.5);
+    \draw[fill=gray!40] (-0.25, 2.35) rectangle (0.25, 2.65);
+    \filldraw (O1) circle (2pt) node[left] {$O_1, O_2$};
+    \draw[->, red, line width=1pt] (O1) -- ++(0, 0.9) node[above] {$\mathbf{z}_1$};
+    \draw[->, blue, line width=1pt] (O1) -- ++(0.9, 0) node[below right] {$\mathbf{x}_1$};
+    \draw[->, purple, line width=1.2pt] (0.4, 2.8) arc[start angle=30, end angle=150, radius=0.4] node[midway, above] {$q_2$};
+
+    % Link 2 horizontal arm
+    \draw[line width=4pt, line cap=round, color=black!75] (O1) -- ++(2.8, 0);
+    \node[above] at (1.4, 2.5) {Link 2 ($a_2 = 0.40\,\text{m}$)};
+
+    % Joint 3 (Revolute)
+    \coordinate (O2) at (2.8, 2.5);
+    \filldraw[fill=orange!30, draw=orange!80!black] (O2) circle (7pt);
+    \draw[->, red, line width=1pt] (O2) -- ++(0.7, 0) node[right] {$\mathbf{x}_2$};
+    \draw[->, green!60!black, line width=1pt] (O2) -- ++(0, 0.8) node[above] {$\mathbf{y}_2$};
+    \node[above=7pt] at (O2) {Joint 3: ($q_3$)};
+    \node at (O2) {$\odot$};
+    \node[below=8pt] at (O2) {$\mathbf{z}_2$ (out)};
+
+    % Link 3 tilted up
+    \draw[line width=3.5pt, line cap=round, color=black!60] (O2) -- ++(30:2.5) coordinate (EE);
+    \node[above left] at ($(O2)!0.5!(EE)$) {Link 3 ($a_3 = 0.40\,\text{m}$)};
+    \draw[dashed] (O2) -- ++(2.2, 0);
+    \draw[->, purple, line width=1.1pt] (3.6, 2.5) arc[start angle=0, end angle=30, radius=0.8] node[midway, right] {$q_3$};
+
+    % End-Effector
+    \filldraw[fill=red!70, draw=red!90!black] (EE) circle (4pt) node[right=4pt] {$\mathbf{p}_e$ (End-Effector)};
+    \draw[->, red, line width=1pt] (EE) -- ++(30:0.8) node[above right] {$\mathbf{z}_e$};
+\end{tikzpicture}
+\caption{Kinematic layout of the PRR serial manipulator.}
+\label{fig:prr_schematic}
+\end{figure}
+
+% --------------------------------------------------
+\section{Direct Kinematics (DK)}
+% --------------------------------------------------
+\subsection{Definition and Purpose}
+\textbf{Direct (Forward) Kinematics} consists in determining the operational pose (position $\mathbf{p}_e$ and orientation $\mathbf{R}_e$) of the manipulator's end-effector with respect to a fixed reference frame, expressed strictly as a deterministic function of the joint variables $\mathbf{q} = [q_1, q_2, q_3]^T$:
+\begin{equation}
+    \mathbf{T}_b^e(\mathbf{q}) = 
+    \begin{bmatrix}
+        \mathbf{R}_b^e(\mathbf{q}) & \mathbf{p}_e(\mathbf{q}) \\
+        \mathbf{0}^T & 1
+    \end{bmatrix}
+\end{equation}
+DK is fundamental for state estimation, collision detection, and closure of kinematic feedback control loops.
+
+\subsection{Denavit-Hartenberg (DH) Model}
+Using the standard Denavit-Hartenberg convention, the intermediate transformation $\mathbf{A}_{i-1}^i$ is parametrized by joint distance $d_i$, joint angle $\theta_i$, link length $a_i$, and link twist $\alpha_i$:
+\begin{equation}
+    \mathbf{A}_{i-1}^i = 
+    \begin{bmatrix}
+        \cos\theta_i & -\sin\theta_i\cos\alpha_i & \sin\theta_i\sin\alpha_i & a_i\cos\theta_i \\
+        \sin\theta_i & \cos\theta_i\cos\alpha_i & -\cos\theta_i\sin\alpha_i & a_i\sin\theta_i \\
+        0 & \sin\alpha_i & \cos\alpha_i & d_i \\
+        0 & 0 & 0 & 1
+    \end{bmatrix}
+\end{equation}
+
+\begin{table}[htbp]
+\centering
+\caption{Standard DH Parameter Table of the PRR Manipulator}
+\label{tab:dh}
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Link $i$} & $d_i$ & $\theta_i$ & $a_i$ & $\alpha_i$ \\
+\midrule
+1 & $q_1$ & 0 & 0 & 0 \\
+2 & 0 & $q_2$ & $a_2 = 0.40$ & $-\pi/2$ \\
+3 & 0 & $q_3$ & 0 & $\pi/2$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Accounting for the mounting base offset $\mathbf{A}_b^0$ and end-effector tool extension $\mathbf{A}_3^e$:
+\begin{equation}
+    \mathbf{A}_b^0 = \begin{bmatrix} \mathbf{I}_{3\times 3} & [0, 0, 0.65]^T \\ \mathbf{0}^T & 1 \end{bmatrix}, \quad
+    \mathbf{A}_3^e = \begin{bmatrix} \mathbf{I}_{3\times 3} & [0, 0, 0.40]^T \\ \mathbf{0}^T & 1 \end{bmatrix}
+\end{equation}
+The total forward transformation is given by:
+\begin{equation}
+    \mathbf{T}_b^e = \mathbf{A}_b^0 \mathbf{A}_0^1(q_1) \mathbf{A}_1^2(q_2) \mathbf{A}_2^3(q_3) \mathbf{A}_3^e
+\end{equation}
+Extracting the end-effector Cartesian position $\mathbf{p}_e = [p_x, p_y, p_z]^T$:
+\begin{equation}
+\label{eq:fk_pos}
+\begin{aligned}
+    p_x &= \cos(q_2)\left(a_2 + a_3\sin(q_3)\right) = \cos(q_2)\left(0.40 + 0.40\sin(q_3)\right) \\
+    p_y &= \sin(q_2)\left(a_2 + a_3\sin(q_3)\right) = \sin(q_2)\left(0.40 + 0.40\sin(q_3)\right) \\
+    p_z &= q_1 + 0.65 + a_3\cos(q_3) = q_1 + 0.65 + 0.40\cos(q_3)
+\end{aligned}
+\end{equation}
+
+% --------------------------------------------------
+\section{Inverse Kinematics (IK) and Branch Duality}
+% --------------------------------------------------
+\subsection{Definition and Utility}
+\textbf{Inverse Kinematics} resolves the joint coordinates $\mathbf{q} = [q_1, q_2, q_3]^T$ required to position the end-effector at a desired Cartesian coordinate $\mathbf{p}_d = [p_{x,d}, p_{y,d}, p_{z,d}]^T$. IK is vital for trajectory tracking, path planning, and operational space control.
+
+\subsection{Analytical Derivation}
+From \eqref{eq:fk_pos}, the cylindrical radial distance $r$ in the horizontal plane is:
+\begin{equation}
+    r = \sqrt{p_{x,d}^2 + p_{y,d}^2} = a_2 + a_3\sin(q_3)
+\end{equation}
+\begin{enumerate}
+    \item \textbf{Joint 2 ($q_2$):}
+    \begin{equation}
+        q_2 = \text{atan2}(p_{y,d}, p_{x,d})
+    \end{equation}
+    \item \textbf{Joint 3 ($q_3$):}
+    \begin{equation}
+        \sin(q_3) = \frac{r - a_2}{a_3} = \frac{r - 0.40}{0.40}
+    \end{equation}
+    \item \textbf{Joint 1 ($q_1$):}
+    \begin{equation}
+        q_1 = p_{z,d} - 0.65 - 0.40\cos(q_3)
+    \end{equation}
+\end{enumerate}
+
+\subsection{Why Two Branches Exist}
+Because the inverse sine function admits two valid angular solutions on the circle $\sin(\pi - \theta) = \sin(\theta)$, the equation yields two distinct configurations for $q_3$:
+\begin{align}
+    \text{\textbf{Branch 1:}} \quad q_{3}^{(1)} &= \arcsin\left(\frac{r - a_2}{a_3}\right) \\
+    \text{\textbf{Branch 2:}} \quad q_{3}^{(2)} &= \pi - \arcsin\left(\frac{r - a_2}{a_3}\right)
+\end{align}
+Because $\cos(q_3^{(1)}) = -\cos(q_3^{(2)})$, the vertical joint variable $q_1$ must compensate for the elevation change:
+\begin{align}
+    q_1^{(1)} &= p_{z,d} - 0.65 - 0.40\cos\left(q_3^{(1)}\right) \\
+    q_1^{(2)} &= p_{z,d} - 0.65 + 0.40\cos\left(q_3^{(1)}\right)
+\end{align}
+
+\paragraph{Physical Interpretation:} These two mathematical branches represent the \textbf{``elbow-up''} versus \textbf{``elbow-down''} postures of Link~3. While both yield the identical terminal Cartesian point $\mathbf{p}_d$, they represent distinct internal manipulator poses. This redundancy is advantageous in practice for avoiding joint limits, circumventing obstacles, and optimizing manipulability.
+
+% --------------------------------------------------
+\section{Differential Kinematics: Geometric vs. Analytical Jacobian}
+% --------------------------------------------------
+\subsection{Geometric Jacobian (J\_G)}
+\paragraph{Definition:} The \textbf{Geometric Jacobian} maps the vector of joint velocities $\mathbf{\dot{q}}$ to the operational linear velocity $\mathbf{\dot{p}}_e$ and physical angular velocity $\boldsymbol{\omega}_e$ of the end-effector:
+\begin{equation}
+    \mathbf{v}_e = \begin{bmatrix} \mathbf{\dot{p}}_e \\ \boldsymbol{\omega}_e \end{bmatrix} = \mathbf{J}_G(\mathbf{q})\mathbf{\dot{q}} = 
+    \begin{bmatrix} \mathbf{J}_{G,v} \\ \mathbf{J}_{G,\omega} \end{bmatrix}\mathbf{\dot{q}}
+\end{equation}
+For a serial chain containing prismatic and revolute joints:
+\begin{equation}
+    \mathbf{J}_{G,i} = 
+    \begin{cases}
+        \begin{bmatrix} \mathbf{z}_{i-1} \\ \mathbf{0} \end{bmatrix} & \text{if Joint $i$ is Prismatic,} \\[10pt]
+        \begin{bmatrix} \mathbf{z}_{i-1} \times (\mathbf{p}_e - \mathbf{p}_{i-1}) \\ \mathbf{z}_{i-1} \end{bmatrix} & \text{if Joint $i$ is Revolute.}
+    \end{cases}
+\end{equation}
+
+\paragraph{Utility:}
+\begin{itemize}
+    \item Governs genuine physical linear and angular momentum.
+    \item Central to static force-torque duality: $\boldsymbol{\tau} = \mathbf{J}_G^T \mathbf{F}_e$.
+    \item Independent of any orientation parameter singularity (free from Euler angle representation issues).
+\end{itemize}
+
+\subsection{Analytical Jacobian (J\_A)}
+\paragraph{Definition:} The \textbf{Analytical Jacobian} is defined as the direct partial derivative of the operational space coordinates $\mathbf{x} = [\mathbf{p}_e^T, \boldsymbol{\phi}^T]^T$ with respect to the joint variables $\mathbf{q}$, where $\boldsymbol{\phi} = [\phi, \theta, \psi]^T$ is a chosen minimal parameterization of orientation (e.g., ZYZ Euler angles):
+\begin{equation}
+    \mathbf{\dot{x}} = \begin{bmatrix} \mathbf{\dot{p}}_e \\ \boldsymbol{\dot{\phi}} \end{bmatrix} = \mathbf{J}_A(\mathbf{q})\mathbf{\dot{q}} = 
+    \begin{bmatrix} \frac{\partial \mathbf{p}_e}{\partial \mathbf{q}} \\[6pt] \frac{\partial \boldsymbol{\phi}}{\partial \mathbf{q}} \end{bmatrix}\mathbf{\dot{q}}
+\end{equation}
+
+\paragraph{Utility and Relationship with $\mathbf{J}_G$:}
+\begin{itemize}
+    \item Direct feedback control in task space: tracking reference trajectories $\mathbf{x}_d(t)$ requires error kinematics $\mathbf{\dot{e}} = \mathbf{\dot{x}}_d - \mathbf{J}_A\mathbf{\dot{q}}$.
+    \item The mapping between the angular components is bridged through the configuration-dependent matrix $\mathbf{T}_A(\boldsymbol{\phi})$:
+    \begin{equation}
+        \boldsymbol{\omega}_e = \mathbf{T}_A(\boldsymbol{\phi})\boldsymbol{\dot{\phi}} \implies 
+        \mathbf{J}_G = \begin{bmatrix} \mathbf{I}_{3\times 3} & \mathbf{0} \\ \mathbf{0} & \mathbf{T}_A(\boldsymbol{\phi}) \end{bmatrix}\mathbf{J}_A
+    \end{equation}
+    \item $\mathbf{J}_A$ becomes singular at the representation singularities of the chosen Euler angles (e.g., $\sin\theta = 0$ for ZYZ), even if the robot itself is not in a kinematic singularity.
+\end{itemize}
+
+% --------------------------------------------------
+\section{MATLAB Cross-Validation Results}
+% --------------------------------------------------
+The analytical equations were compared with MATLAB's Robotics System Toolbox routines (`getTransform`, `inverseKinematics`, and `geometricJacobian`).
+
+\begin{table}[htbp]
+\centering
+\caption{Validation summary against MATLAB built-in functions}
+\label{tab:validation}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Kinematic Module} & \textbf{Evaluation Test Point} & \textbf{Maximum Absolute Error} & \textbf{Status} \\
+\midrule
+Direct Kinematics ($\mathbf{T}_b^e$) & $\mathbf{q} = [-0.2,\, 0.4,\, 0.6]$ & $0.000\times 10^0$ & \textbf{MATCH} \\
+Inverse Kinematics (Branch 1) & $\mathbf{p}_t = [0.45,\, 0.20,\, 0.80]^T$ & $1.083\times 10^{-16}\,\text{m}$ & \textbf{MATCH} \\
+Inverse Kinematics (Branch 2) & $\mathbf{p}_t = [0.45,\, 0.20,\, 0.80]^T$ & $4.965\times 10^{-16}\,\text{m}$ & \textbf{MATCH} \\
+Geometric Jacobian ($\mathbf{J}_G$) & $\mathbf{q} = \mathbf{q}_{\text{analytical}}^{(1)}$ & $0.000\times 10^0$ & \textbf{MATCH} \\
+Analytical Jacobian ($\mathbf{J}_A$) & $\mathbf{q} = \mathbf{q}_{\text{analytical}}^{(1)}$ & $0.000\times 10^0$ & \textbf{MATCH} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+The PRR serial manipulator kinematics were completely characterized. Closed-form analytical expressions for forward kinematics, both branches of inverse kinematics, and differential Jacobians were derived. The numerical results confirm exact agreement with standard computational robotics baselines with machine-precision accuracy.
+
+\end{document}
