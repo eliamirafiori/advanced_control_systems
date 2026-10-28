@@ -1,0 +1,166 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[a4paper, margin=2.2cm]{geometry}
+\usepackage{fontspec}
+\usepackage[english, bidi=basic, provide=*]{babel}
+\babelprovide[import, onchar=ids fonts]{english}
+\babelfont{rm}{Noto Sans}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\title{\textbf{Advanced Control Systems --- Assignment 2\\Energy Formulation and Dynamic Modeling of Serial Manipulators}}
+\author{Student ID: [Your Student ID] \quad | \quad Name: [Your Name]}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report details the energy-based dynamic formulation for serial robot manipulators, focusing on the 3-DOF $\mathrm{PRR}$ manipulator. We present the analytical definitions of kinetic and potential energy for rigid bodies, review König's theorem and Steiner's parallel axis theorem, and construct the generalized manipulator inertia matrix $\mathbf{B}(\mathbf{q})$. The mathematical formulation is systematically cross-checked against symbolic derivations implemented in MATLAB.
+\end{abstract}
+
+% --------------------------------------------------
+\section{Kinetic Energy of Rigid Link Bodies}
+% --------------------------------------------------
+Under the standard assumptions of rigid links and rigid actuation transmissions, the total kinetic energy $\mathcal{T}$ of an $n$-degree-of-freedom manipulator is the sum of the kinetic energies of each individual link $\mathcal{T}_{l_i}$:
+\begin{equation}
+    \mathcal{T}(\mathbf{q}, \mathbf{\dot{q}}) = \sum_{i=1}^n \mathcal{T}_{l_i}(\mathbf{q}, \mathbf{\dot{q}})
+\end{equation}
+For link $i$ with volume $V_{l_i}$ and continuous mass density distribution $\rho(\mathbf{r})$, the kinetic energy is defined as the volume integral of the squared magnitude of the point velocities $\mathbf{\dot{p}}_i^*$:
+\begin{equation}
+    \mathcal{T}_{l_i} = \frac{1}{2} \int_{V_{l_i}} (\mathbf{\dot{p}}_i^*)^T \mathbf{\dot{p}}_i^* \, \rho \, dV
+\end{equation}
+Let $\mathbf{p}_{l_i} \in \mathbb{R}^3$ be the position of the center of mass (CoM) of link $i$ with respect to the base frame $\Sigma_0$, and let $\mathbf{r}_i = \mathbf{p}_i^* - \mathbf{p}_{l_i}$ denote the relative position vector of any internal point. The velocity field inside the rigid link is governed by:
+\begin{equation}
+    \mathbf{\dot{p}}_i^* = \mathbf{\dot{p}}_{l_i} + \boldsymbol{\omega}_i \times \mathbf{r}_i = \mathbf{\dot{p}}_{l_i} + \mathbf{S}(\boldsymbol{\omega}_i)\mathbf{r}_i
+\end{equation}
+where $\boldsymbol{\omega}_i$ is the link angular velocity and $\mathbf{S}(\boldsymbol{\omega}_i)$ is the skew-symmetric cross-product operator.
+
+% --------------------------------------------------
+\section{König's Theorem and Kinetic Energy Decomposition}
+% --------------------------------------------------
+Substituting the velocity field into the kinetic energy integral yields three distinct contributions:
+\begin{equation}
+\label{eq:konig_proof}
+    \mathcal{T}_{l_i} = \underbrace{\frac{1}{2} \int_{V_{l_i}} \mathbf{\dot{p}}_{l_i}^T \mathbf{\dot{p}}_{l_i} \, \rho \, dV}_{\text{Translational Energy}} + \underbrace{\int_{V_{l_i}} \mathbf{\dot{p}}_{l_i}^T \mathbf{S}(\boldsymbol{\omega}_i)\mathbf{r}_i \, \rho \, dV}_{\text{Mutual Energy}} + \underbrace{\frac{1}{2} \int_{V_{l_i}} \mathbf{r}_i^T \mathbf{S}(\boldsymbol{\omega}_i)^T \mathbf{S}(\boldsymbol{\omega}_i)\mathbf{r}_i \, \rho \, dV}_{\text{Rotational Energy}}
+\end{equation}
+
+\subsection{Mutual Energy Cancellation}
+Since the linear velocity of the CoM $\mathbf{\dot{p}}_{l_i}$ and the angular velocity $\boldsymbol{\omega}_i$ do not depend on the spatial integration variable $dV$, the mutual term can be rewritten as:
+\begin{equation}
+    \int_{V_{l_i}} \mathbf{\dot{p}}_{l_i}^T \mathbf{S}(\boldsymbol{\omega}_i)\mathbf{r}_i \, \rho \, dV = \mathbf{\dot{p}}_{l_i}^T \mathbf{S}(\boldsymbol{\omega}_i) \left[ \int_{V_{l_i}} (\mathbf{p}_i^* - \mathbf{p}_{l_i}) \, \rho \, dV \right]
+\end{equation}
+By definition of the center of mass, $\int_{V_{l_i}} \mathbf{p}_i^* \, \rho \, dV = m_{l_i} \mathbf{p}_{l_i}$. Consequently:
+\begin{equation}
+    \int_{V_{l_i}} (\mathbf{p}_i^* - \mathbf{p}_{l_i}) \, \rho \, dV = m_{l_i}\mathbf{p}_{l_i} - m_{l_i}\mathbf{p}_{l_i} = \mathbf{0}
+\end{equation}
+The mutual cross-coupling term vanishes identically.
+
+\subsection{König's Theorem Statement}
+\textbf{König's Theorem} states that the total kinetic energy of a rigid body is decoupled into two independent terms:
+\begin{enumerate}
+    \item The \textbf{translational kinetic energy} of a fictitious point mass concentrated at the center of mass moving at velocity $\mathbf{\dot{p}}_{l_i}$:
+    \begin{equation}
+        \mathcal{T}_{\text{trans}} = \frac{1}{2} m_{l_i} \mathbf{\dot{p}}_{l_i}^T \mathbf{\dot{p}}_{l_i}
+    \end{equation}
+    \item The \textbf{rotational kinetic energy} associated with body rotation about its center of mass:
+    \begin{equation}
+        \mathcal{T}_{\text{rot}} = \frac{1}{2} \boldsymbol{\omega}_i^T \mathbf{I}_{l_i} \boldsymbol{\omega}_i
+    \end{equation}
+\end{enumerate}
+where $\mathbf{I}_{l_i} = \int_{V_{l_i}} \mathbf{S}(\mathbf{r}_i)^T \mathbf{S}(\mathbf{r}_i)\rho \, dV$ is the inertia tensor relative to the CoM expressed in the base reference frame $\Sigma_0$.
+
+Because $\mathbf{I}_{l_i}$ in frame $\Sigma_0$ is configuration-dependent ($\mathbf{I}_{l_i}(\mathbf{q}) = \mathbf{R}_i(\mathbf{q}) \mathbf{I}_{l_i}^i \mathbf{R}_i^T(\mathbf{q})$), where $\mathbf{I}_{l_i}^i$ is the constant link-frame inertia tensor, König's formulation is compactly written as:
+\begin{equation}
+    \mathcal{T}_{l_i} = \frac{1}{2} m_{l_i} \mathbf{\dot{p}}_{l_i}^T \mathbf{\dot{p}}_{l_i} + \frac{1}{2} \boldsymbol{\omega}_i^T \mathbf{R}_i \mathbf{I}_{l_i}^i \mathbf{R}_i^T \boldsymbol{\omega}_i
+\end{equation}
+
+% --------------------------------------------------
+\section{Steiner's Theorem (Parallel Axis Theorem)}
+% --------------------------------------------------
+\subsection{Physical Meaning and Statement}
+Let $\mathbf{I}_C$ denote the inertia tensor of a rigid body of mass $m$ computed with respect to a reference frame $\Sigma_C$ centered directly at its center of mass. **Steiner's Theorem** (the Parallel Axis Theorem) states that if the coordinate frame is translated by a displacement vector $\mathbf{r} \in \mathbb{R}^3$ without changing orientation to a new frame $\Sigma'$, the new inertia tensor $\mathbf{I}$ is given by:
+\begin{equation}
+    \mathbf{I} = \mathbf{I}_C + m \, \mathbf{S}^T(\mathbf{r}) \mathbf{S}(\mathbf{r}) = \mathbf{I}_C + m \left( (\mathbf{r}^T\mathbf{r})\mathbf{I}_{3\times 3} - \mathbf{r}\mathbf{r}^T \right)
+\end{equation}
+
+\subsection{Utility in Robotics Modeling}
+In kinematic and dynamic chains, CAD models and standard URDF specifications often supply link inertia tensors either at the joint attachment frame $\Sigma_i$ or directly at the link CoM $\Sigma_{C_i}$. Steiner's theorem enables:
+\begin{itemize}
+    \item Converting inertia parameters between the link coordinate origin and the CoM.
+    \item Direct computation of the total effective rotational resistance about the physical joint actuation axes.
+    \item Transforming component-level mass distributions into equivalent lumped models.
+\end{itemize}
+
+% --------------------------------------------------
+\section{Potential Energy of Rigid Manipulators}
+% --------------------------------------------------
+In the absence of elastic/flexible elements, potential energy arises exclusively from gravity. For link $i$, the gravitational potential energy $\mathcal{U}_{l_i}$ corresponds to the work done against the constant gravity acceleration field $\mathbf{g}_0 = [0, 0, -g]^T \in \mathbb{R}^3$ (expressed in the base frame $\Sigma_0$):
+\begin{equation}
+    \mathcal{U}_{l_i} = -\int_{V_{l_i}} \mathbf{g}_0^T \mathbf{p}_i^* \, \rho \, dV = -m_{l_i} \mathbf{g}_0^T \mathbf{p}_{l_i}
+\end{equation}
+Summing over all $n$ links:
+\begin{equation}
+    \mathcal{U}(\mathbf{q}) = -\sum_{i=1}^n m_{l_i} \mathbf{g}_0^T \mathbf{p}_{l_i}(\mathbf{q})
+\end{equation}
+Because the position of the center of mass $\mathbf{p}_{l_i}$ depends strictly on the joint variables up to link $i$ ($\mathbf{p}_{l_i} = \mathbf{p}_{l_i}(q_1, \dots, q_i)$), the potential energy is purely a nonlinear function of configuration $\mathbf{q}$ and is velocity-independent.
+
+% --------------------------------------------------
+\section{Manipulator Inertia Matrix Formulation}
+% --------------------------------------------------
+Using the link linear Jacobian $\mathbf{J}_P^{l_i}(\mathbf{q}) = \frac{\partial \mathbf{p}_{l_i}}{\partial \mathbf{q}}$ and angular Jacobian $\mathbf{J}_O^{l_i}(\mathbf{q})$ such that $\mathbf{\dot{p}}_{l_i} = \mathbf{J}_P^{l_i}(\mathbf{q})\mathbf{\dot{q}}$ and $\boldsymbol{\omega}_i = \mathbf{J}_O^{l_i}(\mathbf{q})\mathbf{\dot{q}}$, the kinetic energy of link $i$ is:
+\begin{equation}
+    \mathcal{T}_{l_i} = \frac{1}{2} \mathbf{\dot{q}}^T \left[ m_{l_i} (\mathbf{J}_P^{l_i})^T \mathbf{J}_P^{l_i} + (\mathbf{J}_O^{l_i})^T \mathbf{R}_i \mathbf{I}_{l_i}^i \mathbf{R}_i^T \mathbf{J}_O^{l_i} \right] \mathbf{\dot{q}}
+\end{equation}
+Summing over all links yields the classical quadratic form:
+\begin{equation}
+    \mathcal{T}(\mathbf{q}, \mathbf{\dot{q}}) = \frac{1}{2} \mathbf{\dot{q}}^T \mathbf{B}(\mathbf{q}) \mathbf{\dot{q}}
+\end{equation}
+where the generalized **Inertia Matrix** $\mathbf{B}(\mathbf{q}) \in \mathbb{R}^{n \times n}$ is:
+\begin{equation}
+    \mathbf{B}(\mathbf{q}) = \sum_{i=1}^n \left( m_{l_i} (\mathbf{J}_P^{l_i}(\mathbf{q}))^T \mathbf{J}_P^{l_i}(\mathbf{q}) + (\mathbf{J}_O^{l_i}(\mathbf{q}))^T \mathbf{R}_i(\mathbf{q}) \mathbf{I}_{l_i}^i \mathbf{R}_i^T(\mathbf{q}) \mathbf{J}_O^{l_i}(\mathbf{q}) \right)
+\end{equation}
+
+\paragraph{Properties of $\mathbf{B}(\mathbf{q})$:}
+\begin{itemize}
+    \item \textbf{Symmetry:} $\mathbf{B}(\mathbf{q}) = \mathbf{B}^T(\mathbf{q})$ for all $\mathbf{q} \in \mathbb{R}^n$.
+    \item \textbf{Positive Definiteness:} $\mathbf{B}(\mathbf{q}) > 0$ for all physical configurations, ensuring that $\mathcal{T} > 0$ whenever $\mathbf{\dot{q}} \neq \mathbf{0}$.
+    \item \textbf{Lyapunov Candidate:} The quadratic energy form $\frac{1}{2}\mathbf{\dot{q}}^T\mathbf{B}(\mathbf{q})\mathbf{\dot{q}}$ provides a natural energy-based candidate Lyapunov function for non-linear robot control.
+\end{itemize}
+
+% --------------------------------------------------
+\section{MATLAB Model Verification}
+% --------------------------------------------------
+The dynamic quantities derived from the symbolic MATLAB script confirm full adherence to the theoretical properties:
+
+\begin{table}[htbp]
+\centering
+\caption{Symbolic consistency evaluation of the kinetic and potential energy models}
+\label{tab:matlab_checks}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Analytical Check} & \textbf{Expression Evaluated} & \textbf{Result} \\
+\midrule
+Inertia Matrix Symmetry & $\operatorname{simplify}(\mathbf{B}(\mathbf{q}) - \mathbf{B}^T(\mathbf{q}))$ & $\mathbf{0}_{3\times 3}$ \\
+Quadratic Form Equivalence & $\operatorname{simplify}\left(\mathcal{T} - \frac{1}{2}\mathbf{\dot{q}}^T\mathbf{B}(\mathbf{q})\mathbf{\dot{q}}\right)$ & $0$ \\
+Total Mass Translation & $\mathbf{B}_{11}(q_1)$ for prismatic axis & $m_1 + m_2 + m_3$ \\
+Gravity Vector Alignment & $\mathbf{g}_0 = [0, 0, -g]^T \implies \mathcal{U}_i = m_i g p_{l_{i},z}$ & Verified \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+The kinetic and potential energy formulations for the 3-DOF PRR serial manipulator have been developed based on rigid-body mechanics. König's theorem provides the translational and rotational split of kinetic energy, while Steiner's theorem formalizes reference-frame inertia shifts. The derived inertia matrix $\mathbf{B}(\mathbf{q})$ satisfies the necessary symmetry and positive definiteness conditions, establishing the foundation for dynamic equation derivation via the Euler-Lagrange equations.
+
+\end{document}
