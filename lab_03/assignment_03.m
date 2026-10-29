@@ -607,32 +607,32 @@ end
 % Sum the kinetic energies of all three links.
 totalKineticEnergy = simplify(sum(linkKineticEnergy));
 
-% The joint-space inertia matrix M(q) satisfies:
+% The joint-space inertia matrix B(q) satisfies:
 % T = 1/2 * dq^T * B(q) * dq.
 % Since T is quadratic in dq, its Hessian with respect to dq gives B.
 manipulatorInertiaMatrix = simplify( ...
     jacobian(jacobian(totalKineticEnergy, dq).', dq));
 
-fprintf('\nCenter-of-mass positions in the base frame:\n');
-for i = 1:3
-    fprintf('pCOM_base{%d} =\n', i);
-    disp(pCOM_base{i});
-end
+% fprintf('\nCenter-of-mass positions in the base frame:\n');
+% for i = 1:3
+%     fprintf('pCOM_base{%d} =\n', i);
+%     disp(pCOM_base{i});
+% end
+% 
+% fprintf('\nLinear Jacobians of the link centers of mass:\n');
+% for i = 1:3
+%     fprintf('Jv_COM{%d} =\n', i);
+%     disp(Jv_COM{i});
+% end
+% 
+% fprintf('\nAngular Jacobians of the links:\n');
+% for i = 1:3
+%     fprintf('Jw_link{%d} =\n', i);
+%     disp(Jw_link{i});
+% end
 
-fprintf('\nLinear Jacobians of the link centers of mass:\n');
-for i = 1:3
-    fprintf('Jv_COM{%d} =\n', i);
-    disp(Jv_COM{i});
-end
-
-fprintf('\nAngular Jacobians of the links:\n');
-for i = 1:3
-    fprintf('Jw_link{%d} =\n', i);
-    disp(Jw_link{i});
-end
-
-fprintf('\nKinetic energy of each link [J]:\n');
-disp(linkKineticEnergy);
+% fprintf('\nKinetic energy of each link [J]:\n');
+% disp(linkKineticEnergy);
 
 fprintf('Total kinetic energy T(q,dq) [J]:\n');
 disp(totalKineticEnergy);
@@ -693,14 +693,24 @@ end
 % Total gravitational potential energy of the manipulator.
 totalPotentialEnergy = simplify(sum(linkPotentialEnergy));
 
-fprintf('\nCenter-of-mass positions in the base frame:\n');
-for i = 1:3
-    fprintf('pCOM_base_potential{%d} =\n', i);
-    disp(pCOM_base_potential{i});
-end
-
-fprintf('\nPotential energy of each link [J]:\n');
-disp(linkPotentialEnergy);
+% fprintf('\nCenter-of-mass positions in the base frame:\n');
+% for i = 1:3
+%     fprintf('pCOM_base_potential{%d} =\n', i);
+%     disp(pCOM_base_potential{i});
+% end
+% 
+% fprintf('\nPotential energy of each link [J]:\n');
+% disp(linkPotentialEnergy);
 
 fprintf('Total potential energy U(q) [J]:\n');
 disp(totalPotentialEnergy);
+
+% Check: Potential-energy gradient should be zero
+
+gravityGradient = simplify(jacobian(totalPotentialEnergy, q).');
+
+% fprintf('\nGravity generalized-force vector G(q):\n');
+% disp(gravityGradient);
+
+fprintf('Potential-energy gradient check (should be zero):\n');
+disp(simplify(jacobian(totalPotentialEnergy, q).' - gravityGradient));
