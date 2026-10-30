@@ -714,3 +714,287 @@ gravityGradient = simplify(jacobian(totalPotentialEnergy, q).');
 
 fprintf('Potential-energy gradient check (should be zero):\n');
 disp(simplify(jacobian(totalPotentialEnergy, q).' - gravityGradient));
+
+%% Equations of Motion - Manual
+
+fprintf('\n\n');
+fprintf('---------------------------------------------------\n');
+fprintf('----------- Equations of Motion - Manual ----------\n');
+fprintf('---------------------------------------------------\n');
+
+% Joint accelerations (Slide 25)
+syms ddq1 ddq2 ddq3 real
+ddq = [ddq1; ddq2; ddq3];
+
+% Manipulator inertia matrix B(q) from kinetic energy (Slides 18, 25)
+B = manipulatorInertiaMatrix;
+n = length(q);
+
+% -------------------------------------------------------------------------
+% 1. Christoffel symbols of the first type and Matrix C(q, dq) (Slide 30)
+%    c_ijk = 1/2 * ( d(b_ij)/d(q_k) + d(b_ik)/d(q_j) - d(b_jk)/d(q_i) )
+%    c_ij  = sum_{k=1}^n c_ijk * dq_k
+% -------------------------------------------------------------------------
+c_ijk = sym(zeros(n, n, n));
+for i = 1:n
+    for j = 1:n
+        for k = 1:n
+            c_ijk(i,j,k) = simplify(1/2 * (diff(B(i,j), q(k)) + ...
+                                           diff(B(i,k), q(j)) - ...
+                                           diff(B(j,k), q(i))));
+        end
+    end
+end
+
+C = sym(zeros(n, n));
+for i = 1:n
+    for j = 1:n
+        for k = 1:n
+            C(i,j) = C(i,j) + c_ijk(i,j,k) * dq(k);
+        end
+    end
+end
+C = simplify(C);
+
+% -------------------------------------------------------------------------
+% 2. Centrifugal and Coriolis coefficients h_ijk (Slides 26-27)
+%    h_ijk = d(b_ij)/d(q_k) - 1/2 * d(b_jk)/d(q_i)
+%    h_ijj * dq_j^2 : centrifugal effect induced on Joint i by Joint j
+%    h_ijk * dq_j * dq_k : Coriolis effect induced on Joint i by Joints j, k
+% -------------------------------------------------------------------------
+h_ijk = sym(zeros(n, n, n));
+for i = 1:n
+    for j = 1:n
+        for k = 1:n
+            h_ijk(i,j,k) = simplify(diff(B(i,j), q(k)) - 1/2 * diff(B(j,k), q(i)));
+        end
+    end
+end
+
+h_vec = sym(zeros(n, 1));
+for i = 1:n
+    for j = 1:n
+        for k = 1:n
+            h_vec(i) = h_vec(i) + h_ijk(i,j,k) * dq(k) * dq(j);
+        end
+    end
+end
+h_vec = simplify(h_vec);
+
+% -------------------------------------------------------------------------
+% 3. Gravity generalized force vector g(q) (Slides 20, 25-27)
+%    Method A: Potential energy gradient: g(q) = (dU/dq)^T
+%    Method B: Partial linear Jacobians: g_i(q) = - sum_j m_lj * g0^T * J_Pi^lj
+% -------------------------------------------------------------------------
+g_vec = gravityGradient; % Evaluated in Potential Energy section: jacobian(totalPotentialEnergy, q).'
+
+% Gravity acceleration vector in base frame Sigma_0 (Slide 20)
+g0 = gravityBase; 
+
+g_from_J = sym(zeros(n, 1));
+for i = 1:n
+    for j = 1:n
+        % Jv_COM{j}(:, i) is the i-th column of the j-th link COM Jacobian
+        g_from_J(i) = g_from_J(i) - linkMass(j) * g0.' * Jv_COM{j}(:, i);
+    end
+end
+g_from_J = simplify(g_from_J);
+
+% -------------------------------------------------------------------------
+% 4. Time derivative of inertia matrix B_dot and skew-symmetry check
+%    N(q, dq) = B_dot - 2*C is skew-symmetric: N + N.' == 0
+% -------------------------------------------------------------------------
+B_dot = sym(zeros(n, n));
+for i = 1:n
+    for j = 1:n
+        for k = 1:n
+            B_dot(i,j) = B_dot(i,j) + diff(B(i,j), q(k)) * dq(k);
+        end
+    end
+end
+B_dot = simplify(B_dot);
+
+N_skew = simplify(B_dot - 2*C);
+
+% -------------------------------------------------------------------------
+% 5. Standard Equations of Motion (Slide 31)
+%    B(q)*ddq + C(q, dq)*dq + g(q) = tau
+% -------------------------------------------------------------------------
+tau = simplify(B*ddq + C*dq + g_vec);
+
+% Optional: Extended model with friction and external wrench (Slide 31)
+% B(q)*ddq + C(q, dq)*dq + Fv*dq + Fs*sign(dq) + g(q) = tau - J^T(q)*he
+syms Fv1 Fv2 Fv3 real                 % Viscous friction coefficients
+syms Fs1 Fs2 Fs3 real                 % Coulomb friction coefficients
+syms fex fey fez mux muy muz real     % External wrench he = [fe; mue]
+
+Fv = diag([Fv1, Fv2, Fv3]);
+Fs = diag([Fs1, Fs2, Fs3]);
+he = [fex; fey; fez; mux; muy; muz];
+
+tau_friction = Fv*dq + Fs*sign(dq);
+tau_external = JG.' * he;
+
+tau_extended = simplify(B*ddq + C*dq + tau_friction + g_vec + tau_external);
+
+% Display results
+fprintf('Manipulator Inertia Matrix B(q):\n');
+disp(B);
+
+fprintf('Coriolis & Centrifugal Matrix C(q, dq):\n');
+disp(C);
+
+fprintf('Gravity Vector g(q):\n');
+disp(g_vec);
+
+fprintf('Equations of Motion: Generalized Torque Vector tau(q, dq, ddq):\n');
+disp(tau);
+
+% Analytical property checks (all must simplify to 0)
+fprintf('\n--- Analytical Consistency Checks ---\n');
+
+% Christoffel symmetry check: c_ijk = c_ikj
+sym_c_err = sym(0);
+for i = 1:n
+    for j = 1:n
+        for k = 1:n
+            sym_c_err = sym_c_err + simplify(abs(c_ijk(i,j,k) - c_ijk(i,k,j)));
+        end
+    end
+end
+fprintf('Christoffel symmetry check (c_ijk - c_ikj == 0): %s\n', char(sym_c_err == 0));
+
+% Centrifugal diagonal nullity check: h_iii == 0 (Slide 27)
+h_iii_err = sym(0);
+for i = 1:n
+    h_iii_err = h_iii_err + abs(h_ijk(i,i,i));
+end
+fprintf('Centrifugal diagonal nullity check (h_iii == 0): %s\n', char(h_iii_err == 0));
+
+% Equivalence between C(q, dq)*dq and sum(sum(h_ijk*dq_k*dq_j))
+fprintf('C(q,dq)*dq vs h_vec equivalence (should be zero):\n');
+disp(simplify(C*dq - h_vec));
+
+% Gravity derivation equivalence
+fprintf('Gravity vector equivalence check (g_from_U - g_from_J == 0):\n');
+disp(simplify(g_vec - g_from_J));
+
+% Skew-symmetry of B_dot - 2C (should be zero matrix)
+fprintf('Skew-symmetry check (B_dot - 2*C) + (B_dot - 2*C).'' (should be zero):\n');
+disp(simplify(N_skew + N_skew.'));
+
+
+%% Equations of Motion - Comparison
+
+fprintf('\n\n');
+fprintf('-------------------------------------------------------\n');
+fprintf('----------- Equations of Motion - Comparison ----------\n');
+fprintf('-------------------------------------------------------\n');
+
+% Ensure consistent gravity specification in the MATLAB rigid body tree
+g_val = 9.81;
+robot.Gravity = [0, 0, -g_val];
+
+% Test configuration, velocities, and accelerations
+q_check   = [-0.2,  0.4,  0.6];
+dq_check  = [ 0.1, -0.3,  0.5];
+ddq_check = [ 0.05, 0.2, -0.1];
+
+% Extract non-fixed moving bodies corresponding to joints 1, 2, and 3
+movingBodies = {};
+for i = 1:numel(robot.Bodies)
+    if ~strcmp(robot.Bodies{i}.Joint.Type, 'fixed')
+        movingBodies{end+1} = robot.Bodies{i};
+    end
+end
+
+% Extract actual physical parameters directly from the URDF model
+m_val = zeros(1, 3);
+com_val = cell(1, 3);
+I_C_val = cell(1, 3);
+
+for i = 1:3
+    b = movingBodies{i};
+    m_val(i) = b.Mass;
+    c = b.CenterOfMass(:); % 3x1 vector [xc; yc; zc]
+    com_val{i} = c;
+    
+    % MATLAB b.Inertia is [Ixx Iyy Izz Iyz Ixz Ixy] relative to body origin
+    I_vec = b.Inertia;
+    I_origin = [I_vec(1), I_vec(6), I_vec(5);
+                I_vec(6), I_vec(2), I_vec(4);
+                I_vec(5), I_vec(4), I_vec(3)];
+            
+    % Convert to inertia tensor about the Center of Mass via Steiner's theorem:
+    % I_C = I_origin - m * ( (c'*c)*eye(3) - c*c' ) (Slides 14-15)
+    I_C = I_origin - m_val(i) * ( (c'*c)*eye(3) - (c * c') );
+    I_C_val{i} = I_C;
+end
+
+% Numerical substitution list for symbolic expressions
+dyn_syms = [q1, q2, q3, dq1, dq2, dq3, ddq1, ddq2, ddq3, ...
+            a1, a2, a3, g, ...
+            xc1, yc1, zc1, xc2, yc2, zc2, xc3, yc3, zc3, ...
+            I1xx, I1yy, I1zz, I1xy, I1xz, I1yz, ...
+            I2xx, I2yy, I2zz, I2xy, I2xz, I2yz, ...
+            I3xx, I3yy, I3zz, I3xy, I3xz, I3yz];
+
+dyn_vals = [q_check, dq_check, ddq_check, ...
+            a1_a, a2_a, a3_a, g_val, ...
+            com_val{1}(1), com_val{1}(2), com_val{1}(3), ...
+            com_val{2}(1), com_val{2}(2), com_val{2}(3), ...
+            com_val{3}(1), com_val{3}(2), com_val{3}(3), ...
+            I_C_val{1}(1,1), I_C_val{1}(2,2), I_C_val{1}(3,3), ...
+            I_C_val{1}(1,2), I_C_val{1}(1,3), I_C_val{1}(2,3), ...
+            I_C_val{2}(1,1), I_C_val{2}(2,2), I_C_val{2}(3,3), ...
+            I_C_val{2}(1,2), I_C_val{2}(1,3), I_C_val{2}(2,3), ...
+            I_C_val{3}(1,1), I_C_val{3}(2,2), I_C_val{3}(3,3), ...
+            I_C_val{3}(1,2), I_C_val{3}(1,3), I_C_val{3}(2,3)];
+
+% Evaluate manual analytical dynamic expressions
+B_manual_num   = double(subs(B, dyn_syms, dyn_vals));
+C_manual_num   = double(subs(C, dyn_syms, dyn_vals));
+g_manual_num   = double(subs(g_vec, dyn_syms, dyn_vals));
+tau_manual_num = double(subs(tau, dyn_syms, dyn_vals));
+
+% Built-in MATLAB Robotics System Toolbox dynamic evaluations
+B_builtin    = massMatrix(robot, q_check);
+C_dq_builtin = velocityProduct(robot, q_check, dq_check).';
+g_builtin    = gravityTorque(robot, q_check).';
+tau_builtin  = inverseDynamics(robot, q_check, dq_check, ddq_check).';
+
+% Cross-Check 1: Inertia Matrix B(q)
+err_B = norm(B_manual_num - B_builtin, 'fro');
+fprintf('Inertia Matrix B(q) Frobenius Error: %.3e\n', err_B);
+if err_B < 1e-6
+    fprintf('INERTIA MATRIX B(q) CROSS-CHECK: MATCH\n');
+else
+    fprintf('INERTIA MATRIX B(q) CROSS-CHECK: DIFFER\n');
+end
+
+% Cross-Check 2: Velocity Product Vector C(q, dq)*dq
+err_C = norm(C_manual_num * dq_check.' - C_dq_builtin);
+fprintf('Velocity Product C*dq Error:         %.3e\n', err_C);
+if err_C < 1e-6
+    fprintf('VELOCITY PRODUCT C*dq CROSS-CHECK: MATCH\n');
+else
+    fprintf('VELOCITY PRODUCT C*dq CROSS-CHECK: DIFFER\n');
+end
+
+% Cross-Check 3: Gravity Torque Vector g(q)
+err_g = norm(g_manual_num - g_builtin);
+fprintf('Gravity Vector g(q) Error:          %.3e\n', err_g);
+if err_g < 1e-6
+    fprintf('GRAVITY TORQUE g(q) CROSS-CHECK:   MATCH\n');
+else
+    fprintf('GRAVITY TORQUE g(q) CROSS-CHECK:   DIFFER\n');
+end
+
+% Cross-Check 4: Total Inverse Dynamics Torque Vector tau
+err_tau = norm(tau_manual_num - tau_builtin);
+fprintf('Inverse Dynamics Torque tau Error:   %.3e\n', err_tau);
+if err_tau < 1e-6
+    fprintf('INVERSE DYNAMICS tau CROSS-CHECK:  MATCH\n');
+else
+    fprintf('INVERSE DYNAMICS tau CROSS-CHECK:  DIFFER\n');
+end
