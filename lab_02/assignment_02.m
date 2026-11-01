@@ -597,11 +597,13 @@ for i = 1:3
     vCOM = Jv_COM{i}*dq;
     omegaLink = Jw_link{i}*dq;
 
+    % Konig's Theorem Statement
     % Rigid-body kinetic energy of this link:
     % T_i = 1/2*m_i*v_COM^T*v_COM + 1/2*omega^T*I_COM*omega.
-    linkKineticEnergy(i) = simplify( ...
-        1/2*linkMass(i)*(vCOM.'*vCOM) + ...
-        1/2*(omegaLink.'*inertiaCOM_base{i}*omegaLink));
+    transKineticEnergy = 1/2*linkMass(i)*(vCOM.'*vCOM);
+    rotatKineticEnergy = 1/2*(omegaLink.'*inertiaCOM_base{i}*omegaLink);
+    linkKineticEnergy(i) = simplify(...
+        transKineticEnergy + rotatKineticEnergy);
 end
 
 % Sum the kinetic energies of all three links.
@@ -610,6 +612,7 @@ totalKineticEnergy = simplify(sum(linkKineticEnergy));
 % The joint-space inertia matrix B(q) satisfies:
 % T = 1/2 * dq^T * B(q) * dq.
 % Since T is quadratic in dq, its Hessian with respect to dq gives B.
+% B(q) = diff(diff(T(q, dq), dq), dq);
 manipulatorInertiaMatrix = simplify( ...
     jacobian(jacobian(totalKineticEnergy, dq).', dq));
 
