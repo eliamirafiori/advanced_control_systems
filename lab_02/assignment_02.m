@@ -533,26 +533,28 @@ syms I2xx I2yy I2zz I2xy I2xz I2yz real
 syms I3xx I3yy I3zz I3xy I3xz I3yz real
 
 inertiaLocal = {
-    [I1xx I1xy I1xz; I1xy I1yy I1yz; I1xz I1yz I1zz], ...
-    [I2xx I2xy I2xz; I2xy I2yy I2yz; I2xz I2yz I2zz], ...
-    [I3xx I3xy I3xz; I3xy I3yy I3yz; I3xz I3yz I3zz] };
+    [I1xx I1xy I1xz; I1xy I1yy I1yz; I1xz I1yz I1zz], ...   % Link 1
+    [I2xx I2xy I2xz; I2xy I2yy I2yz; I2xz I2yz I2zz], ...   % Link 2
+    [I3xx I3xy I3xz; I3xy I3yy I3yz; I3xz I3yz I3zz] };     % Link 3
 
 % Transform each link frame into the base frame.
 T_base_link = {Ab0*A01, Ab0*A01*A12, Ab0*A01*A12*A23};
 
 % Joint axes and joint origins in the base frame, consistent with the
 % geometric Jacobian derived in the previous block.
-T_base_joint1 = Ab0;
-T_base_joint2 = Ab0*A01;
-T_base_joint3 = Ab0*A01*A12;
 
-z0 = T_base_joint1(1:3,3);   % Prismatic joint axis
+% Joint 1 - Prismatic
+z0 = Ab0(1:3, 3);    % Prismatic joint axis
 
-z1 = T_base_joint2(1:3,3);   % Revolute joint 2 axis
-p1 = T_base_joint2(1:3,4);   % Origin of revolute joint 2
+% Joint 2 - Revolute
+Ab1 = Ab0*A01;
+z1 = Ab1(1:3, 3);   % Revolute joint 2 axis
+p1 = Ab1(1:3, 4);   % Origin of revolute joint 2
 
-z2 = T_base_joint3(1:3,3);   % Revolute joint 3 axis
-p2 = T_base_joint3(1:3,4);   % Origin of revolute joint 3
+% Joint 3 - Revolute
+Ab2 = Ab0*A01*A12;
+z2 = Ab2(1:3, 3);   % Revolute joint 3 axis
+p2 = Ab2(1:3, 4);   % Origin of revolute joint 3
 
 % Preallocate symbolic outputs for each link.
 pCOM_base = cell(1,3);       % Center-of-mass position in base frame
@@ -717,3 +719,45 @@ gravityGradient = simplify(jacobian(totalPotentialEnergy, q).');
 
 fprintf('Potential-energy gradient check (should be zero):\n');
 disp(simplify(jacobian(totalPotentialEnergy, q).' - gravityGradient));
+
+%% Steiner's Theorem - Inertia Tensor
+
+syms m rx ry rz real
+syms Ixx Iyy Izz Ixy Ixz Iyz real
+
+% Inertia tensor about the center of mass (Sigma_C)
+I_C = [Ixx Ixy Ixz;
+    Ixy Iyy Iyz;
+    Ixz Iyz Izz];
+
+% Translation vector r = [rx; ry; rz] from the center of mass
+r = [rx; ry; rz];
+
+% Formulation A: Using the skew-symmetric matrix S^T(r)*S(r)
+I_steiner_A = simplify(I_C + m * (s(r).' * s(r)));
+
+% Formulation B: Using vector outer products (r^T*r*I - r*r^T)
+I_steiner_B = simplify(I_C + m * ((r.' * r)*eye(3) - (r * r.')));
+
+% -------------------------------------------------------------------------
+% 2. Application to the Robot's Links (Links 1, 2, and 3)
+% Translating from link center of mass to link frame origin (r = comLocal{i})
+% -------------------------------------------------------------------------
+I_origin = cell(1, 3);
+
+for i = 1:3
+    % r_i is the offset vector between the link frame origin and the CoM
+    r_i = comLocal{i}; 
+    m_i = linkMass(i);
+    I_Ci = inertiaLocal{i};
+
+    % Inertia tensor with respect to the link frame origin:
+    I_origin{i} = simplify(I_Ci + m_i * ((r_i.' * r_i)*eye(3) - (r_i * r_i.')));
+
+    fprintf('Inertia tensor of Link %d about its frame origin (Steiner):\n', i);
+    disp(I_origin{i});
+end
+
+% Verify equivalence of the two Steiner-theorem formulations.
+fprintf('\nSteiner formulation equivalence check (should be zero):\n');
+disp(simplify(I_steiner_A - I_steiner_B));
