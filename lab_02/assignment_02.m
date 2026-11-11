@@ -508,264 +508,243 @@ else
     fprintf('ANALYTICAL JACOBIAN CROSS-CHECK: DIFFER\n');
 end
 
-%% Kinetic Energy - Manual
+%% ASSIGNMENT #2: KINETIC AND POTENTIAL ENERGY OF A RIGID BODY
 
 fprintf('\n\n');
 fprintf('-----------------------------------------------\n');
-fprintf('----------- Kinetic Energy - Manual -----------\n');
+fprintf('----------- Kinetic and Potential Energy ------\n');
 fprintf('-----------------------------------------------\n');
 
-% Generalized coordinates and joint velocities.
-% q1 is prismatic; q2 and q3 are revolute.
-q = [q1; q2; q3];
+%% 1. Definition of Dynamic Variables and Gravity Vector
+% Generalized coordinates and velocities
 syms dq1 dq2 dq3 real
+q  = [q1; q2; q3];
 dq = [dq1; dq2; dq3];
 
-% Use the analytical link masses already defined above (in kg).
-linkMass = [m1_a; m2_a; m3_a];
+% Analytical link masses (Slides 4, 20)
+m_l1 = m1_a;
+m_l2 = m2_a;
+m_l3 = m3_a;
 
-% Center-of-mass coordinates expressed in each link's own frame.
+% Acceleration of gravity vector in base frame Sigma_0 (Slides 20, 25)
+% Base z-axis points upward, gravity acts downwards along -z0
+syms g real
+g0 = [0; 0; -g];
+
+% Local Center-of-Mass coordinates expressed in link frame Sigma_i (Slide 21)
 syms xc1 yc1 zc1 xc2 yc2 zc2 xc3 yc3 zc3 real
-comLocal = { [xc1; yc1; zc1], ...
-             [xc2; yc2; zc2], ...
-             [xc3; yc3; zc3] };
+p_l1_1 = [xc1; yc1; zc1]; % CoM of link 1 in Frame 1
+p_l2_2 = [xc2; yc2; zc2]; % CoM of link 2 in Frame 2
+p_l3_3 = [xc3; yc3; zc3]; % CoM of link 3 in Frame 3
 
-% Inertia tensors about each link's center of mass, expressed in that
-% link's own frame. The tensors are symmetric but not assumed diagonal.
+% Link inertia tensors relative to CoM expressed in link frame Sigma_i: I_li^i
+% Symmetric matrices relative to central axes (Slides 10-15)
 syms I1xx I1yy I1zz I1xy I1xz I1yz real
 syms I2xx I2yy I2zz I2xy I2xz I2yz real
 syms I3xx I3yy I3zz I3xy I3xz I3yz real
 
-inertiaLocal = {
-    [I1xx I1xy I1xz; I1xy I1yy I1yz; I1xz I1yz I1zz], ...   % Link 1
-    [I2xx I2xy I2xz; I2xy I2yy I2yz; I2xz I2yz I2zz], ...   % Link 2
-    [I3xx I3xy I3xz; I3xy I3yy I3yz; I3xz I3yz I3zz] };     % Link 3
+I_l1_1 = [I1xx I1xy I1xz;
+          I1xy I1yy I1yz;
+          I1xz I1yz I1zz];
 
-% Transform each link frame into the base frame.
-T_base_link = {Ab0*A01, Ab0*A01*A12, Ab0*A01*A12*A23};
+I_l2_2 = [I2xx I2xy I2xz;
+          I2xy I2yy I2yz;
+          I2xz I2yz I2zz];
 
-% Joint axes and joint origins in the base frame, consistent with the
-% geometric Jacobian derived in the previous block.
-
-% Joint 1 - Prismatic
-z0 = Ab0(1:3, 3);    % Prismatic joint axis
-
-% Joint 2 - Revolute
-Ab1 = Ab0*A01;
-z1 = Ab1(1:3, 3);   % Revolute joint 2 axis
-p1 = Ab1(1:3, 4);   % Origin of revolute joint 2
-
-% Joint 3 - Revolute
-Ab2 = Ab0*A01*A12;
-z2 = Ab2(1:3, 3);   % Revolute joint 3 axis
-p2 = Ab2(1:3, 4);   % Origin of revolute joint 3
-
-% Preallocate symbolic outputs for each link.
-pCOM_base = cell(1,3);       % Center-of-mass position in base frame
-Jv_COM = cell(1,3);          % Linear COM Jacobian
-Jw_link = cell(1,3);         % Angular velocity Jacobian
-inertiaCOM_base = cell(1,3); % COM inertia tensor rotated into base frame
-linkKineticEnergy = sym(zeros(3,1));
-
-for i = 1:3
-    % Extract rotation and translation from base-to-link transform.
-    R_base_link = T_base_link{i}(1:3,1:3);
-    p_base_link = T_base_link{i}(1:3,4);
-
-    % Express the center of mass in the base frame:
-    % p_COM = R_base_link * p_COM_local + p_base_link.
-    pCOM_base{i} = simplify(R_base_link*comLocal{i} + p_base_link);
-
-    % Linear Jacobian, assembled using the same geometric-Jacobian rules
-    % as the end-effector Jacobian above:
-    %   prismatic joint:       Jv(:,1) = z0
-    %   revolute joint j:      Jv(:,j) = z_j x (p_COM - p_j)
-    % A link is affected only by joints preceding or attached to it.
-    if i == 1
-        Jv_COM{i} = [z0, zeros(3,1), zeros(3,1)];
-        Jw_link{i} = [zeros(3,1), zeros(3,1), zeros(3,1)];
-    elseif i == 2
-        Jv_COM{i} = [z0, cross(z1, pCOM_base{i} - p1), zeros(3,1)];
-        Jw_link{i} = [zeros(3,1), z1, zeros(3,1)];
-    else
-        Jv_COM{i} = [z0, ...
-                     cross(z1, pCOM_base{i} - p1), ...
-                     cross(z2, pCOM_base{i} - p2)];
-        Jw_link{i} = [zeros(3,1), z1, z2];
-    end
-
-    % Rotate the COM inertia tensor from the local link frame into
-    % the base frame: I_base = R * I_local * R^T.
-    inertiaCOM_base{i} = simplify( ...
-        R_base_link*inertiaLocal{i}*R_base_link.');
-
-    % USE STEINER MATRIX
-
-    % Obtain COM linear and link angular velocities from the Jacobians.
-    vCOM = Jv_COM{i}*dq;
-    omegaLink = Jw_link{i}*dq;
-
-    % Konig's Theorem Statement
-    % Rigid-body kinetic energy of this link:
-    % T_i = 1/2*m_i*v_COM^T*v_COM + 1/2*omega^T*I_COM*omega.
-    transKineticEnergy = 1/2*linkMass(i)*(vCOM.'*vCOM);
-    rotatKineticEnergy = 1/2*(omegaLink.'*inertiaCOM_base{i}*omegaLink);
-    linkKineticEnergy(i) = simplify(...
-        transKineticEnergy + rotatKineticEnergy);
-end
-
-% Sum the kinetic energies of all three links.
-totalKineticEnergy = simplify(sum(linkKineticEnergy));
-
-% The joint-space inertia matrix B(q) satisfies:
-% T = 1/2 * dq^T * B(q) * dq.
-% Since T is quadratic in dq, its Hessian with respect to dq gives B.
-% B(q) = diff(diff(T(q, dq), dq), dq);
-manipulatorInertiaMatrix = simplify( ...
-    jacobian(jacobian(totalKineticEnergy, dq).', dq));
-
-% fprintf('\nCenter-of-mass positions in the base frame:\n');
-% for i = 1:3
-%     fprintf('pCOM_base{%d} =\n', i);
-%     disp(pCOM_base{i});
-% end
-% 
-% fprintf('\nLinear Jacobians of the link centers of mass:\n');
-% for i = 1:3
-%     fprintf('Jv_COM{%d} =\n', i);
-%     disp(Jv_COM{i});
-% end
-% 
-% fprintf('\nAngular Jacobians of the links:\n');
-% for i = 1:3
-%     fprintf('Jw_link{%d} =\n', i);
-%     disp(Jw_link{i});
-% end
-
-% fprintf('\nKinetic energy of each link [J]:\n');
-% disp(linkKineticEnergy);
-
-fprintf('Total kinetic energy T(q,dq) [J]:\n');
-disp(totalKineticEnergy);
-
-fprintf('Joint-space inertia matrix B(q):\n');
-disp(manipulatorInertiaMatrix);
-
-% Check why q1 and q2 are not present in B(q)
-
-% Checks: both expressions should simplify to zero.
-fprintf('\nInertia matrix symmetry check (should be zero):\n');
-disp(simplify(manipulatorInertiaMatrix - manipulatorInertiaMatrix.'));
-
-fprintf('Kinetic-energy quadratic-form check (should be zero):\n');
-disp(simplify(totalKineticEnergy - ...
-    1/2*dq.'*manipulatorInertiaMatrix*dq));
+I_l3_3 = [I3xx I3xy I3xz;
+          I3xy I3yy I3yz;
+          I3xz I3yz I3zz];
 
 
-%% Potential Energy - Manual
+%% 2. Steiner's Theorem (Parallel Axis Theorem) Formulation (Slides 14-15)
+% The inertia tensor I with respect to a frame obtained by translating the CoM 
+% frame Sigma_C by vector r is:
+% I = I_C + m * S^T(r)*S(r) = I_C + m * (r^T*r*eye(3) - r*r^T)
 
-fprintf('\n\n');
-fprintf('-------------------------------------------------\n');
-fprintf('----------- Potential Energy - Manual -----------\n');
-fprintf('-------------------------------------------------\n');
+% Skew-symmetric operator function S(r)
+s = @(w) [  0    -w(3)  w(2);
+           w(3)   0    -w(1);
+          -w(2)  w(1)   0  ];
 
-% Gravity expressed in the base frame.
-% The base z-axis points upward, so gravity acts in the negative z direction.
-syms g real
-gravityBase = [0; 0; -g];
+% Link 1: Shift from CoM to Frame 1 origin by vector r1 = p_l1_1
+r1 = p_l1_1;
+I_O1_1 = simplify(I_l1_1 + m_l1 * ((r1.' * r1)*eye(3) - (r1 * r1.')));
 
-% Reuse the analytical link masses from the beginning of this script.
-linkMass = [m1_a; m2_a; m3_a];
+% Link 2: Shift from CoM to Frame 2 origin by vector r2 = p_l2_2
+r2 = p_l2_2;
+I_O2_2 = simplify(I_l2_2 + m_l2 * ((r2.' * r2)*eye(3) - (r2 * r2.')));
 
-% Define the local center-of-mass coordinates again so this section can
-% be understood and run independently of the kinetic-energy calculations.
-syms xc1 yc1 zc1 xc2 yc2 zc2 xc3 yc3 zc3 real
-comLocal = { [xc1; yc1; zc1], ...
-             [xc2; yc2; zc2], ...
-             [xc3; yc3; zc3] };
+% Link 3: Shift from CoM to Frame 3 origin by vector r3 = p_l3_3
+r3 = p_l3_3;
+I_O3_3 = simplify(I_l3_3 + m_l3 * ((r3.' * r3)*eye(3) - (r3 * r3.')));
 
-% Base-to-link transformations (repeated intentionally for clarity).
-T_base_link = {Ab0*A01, Ab0*A01*A12, Ab0*A01*A12*A23};
+fprintf('\n--- Steiner Inertia Tensors about Link Frame Origins (Slide 14) ---\n');
+fprintf('Link 1 Inertia about Frame 1 Origin:\n'); disp(I_O1_1);
+fprintf('Link 2 Inertia about Frame 2 Origin:\n'); disp(I_O2_2);
+fprintf('Link 3 Inertia about Frame 3 Origin:\n'); disp(I_O3_3);
 
-pCOM_base_potential = cell(1,3);
-linkPotentialEnergy = sym(zeros(3,1));
 
-for i = 1:3
-    % Convert each link's local COM position to the base frame.
-    R_base_link = T_base_link{i}(1:3,1:3);
-    p_base_link = T_base_link{i}(1:3,4);
-    pCOM_base_potential{i} = simplify( ...
-        R_base_link*comLocal{i} + p_base_link);
+%% 3. Forward Kinematics for Link Frames and CoM Positions (Slide 21)
+% Base-to-link homogeneous transformations: T_0^i = Ab0 * A01 * ... * A(i-1)i
+T_b1 = Ab0 * A01;
+T_b2 = Ab0 * A01 * A12;
+T_b3 = Ab0 * A01 * A12 * A23;
 
-    % Gravitational potential energy relative to the base-frame origin:
-    % U_i = -m_i * gravityBase^T * p_COM.
-    linkPotentialEnergy(i) = simplify( ...
-        -linkMass(i)*gravityBase.'*pCOM_base_potential{i});
-end
+% Rotation matrices from base frame Sigma_0 to link frames Sigma_i
+R1 = T_b1(1:3, 1:3);
+R2 = T_b2(1:3, 1:3);
+R3 = T_b3(1:3, 1:3);
 
-% Total gravitational potential energy of the manipulator.
-totalPotentialEnergy = simplify(sum(linkPotentialEnergy));
+% Origins of link frames in base frame
+p_O1 = T_b1(1:3, 4);
+p_O2 = T_b2(1:3, 4);
+p_O3 = T_b3(1:3, 4);
 
-% fprintf('\nCenter-of-mass positions in the base frame:\n');
-% for i = 1:3
-%     fprintf('pCOM_base_potential{%d} =\n', i);
-%     disp(pCOM_base_potential{i});
-% end
-% 
-% fprintf('\nPotential energy of each link [J]:\n');
-% disp(linkPotentialEnergy);
+% Joint axes and origins in base frame for Jacobian assembly (Slides 16-17)
+z0 = Ab0(1:3, 3);        p0 = Ab0(1:3, 4);        % Joint 1 (Prismatic)
+z1 = T_b1(1:3, 3);       p1 = T_b1(1:3, 4);       % Joint 2 (Revolute)
+z2 = T_b2(1:3, 3);       p2 = T_b2(1:3, 4);       % Joint 3 (Revolute)
 
-fprintf('Total potential energy U(q) [J]:\n');
-disp(totalPotentialEnergy);
+% Positions of Link Centers of Mass in base frame Sigma_0 (Slide 21):
+% p_li = R_i * p_li^i + p_Oi
+p_l1 = simplify(R1 * p_l1_1 + p_O1);
+p_l2 = simplify(R2 * p_l2_2 + p_O2);
+p_l3 = simplify(R3 * p_l3_3 + p_O3);
 
-% Check: Potential-energy gradient should be zero
+fprintf('\n--- Center of Mass Positions in Base Frame Sigma_0 (Slide 21) ---\n');
+fprintf('p_l1 =\n'); disp(p_l1);
+fprintf('p_l2 =\n'); disp(p_l2);
+fprintf('p_l3 =\n'); disp(p_l3);
 
-gravityGradient = simplify(jacobian(totalPotentialEnergy, q).');
 
-% fprintf('\nGravity generalized-force vector G(q):\n');
-% disp(gravityGradient);
+%% 4. Partial Jacobians for Link Centers of Mass (Slides 16-17)
+% For link i, the partial Jacobians relate joint velocities to Cartesian velocities:
+% dp_li = J_P_li * dq
+% omega_i = J_O_li * dq
 
-fprintf('Potential-energy gradient check (should be zero):\n');
-disp(simplify(jacobian(totalPotentialEnergy, q).' - gravityGradient));
+% Link 1 (Affected only by Joint 1 - Prismatic):
+% Column 1: j_P1 = z0, j_O1 = 0
+% Columns 2, 3: zero
+J_P_l1 = [z0, zeros(3,1), zeros(3,1)];
+J_O_l1 = [zeros(3,1), zeros(3,1), zeros(3,1)];
 
-%% Steiner's Theorem - Inertia Tensor
+% Link 2 (Affected by Joint 1 - Prismatic, and Joint 2 - Revolute):
+% Column 1: j_P1 = z0,                      j_O1 = 0
+% Column 2: j_P2 = z1 x (p_l2 - p1),        j_O2 = z1
+% Column 3: zero
+J_P_l2 = [z0, cross(z1, p_l2 - p1), zeros(3,1)];
+J_O_l2 = [zeros(3,1), z1, zeros(3,1)];
 
-syms m rx ry rz real
-syms Ixx Iyy Izz Ixy Ixz Iyz real
+% Link 3 (Affected by Joints 1, 2, and 3):
+% Column 1: j_P1 = z0,                      j_O1 = 0
+% Column 2: j_P2 = z1 x (p_l3 - p1),        j_O2 = z1
+% Column 3: j_P3 = z2 x (p_l3 - p2),        j_O3 = z2
+J_P_l3 = [z0, cross(z1, p_l3 - p1), cross(z2, p_l3 - p2)];
+J_O_l3 = [zeros(3,1), z1, z2];
 
-% Inertia tensor about the center of mass (Sigma_C)
-I_C = [Ixx Ixy Ixz;
-    Ixy Iyy Iyz;
-    Ixz Iyz Izz];
 
-% Translation vector r = [rx; ry; rz] from the center of mass
-r = [rx; ry; rz];
+%% 5. Kinetic Energy - Manual (Slides 6-18)
+% König's Theorem (Slides 12, 16):
+% T_li = 1/2 * m_li * dp_li^T * dp_li + 1/2 * omega_i^T * I_li * omega_i
+% where I_li = R_i * I_li^i * R_i^T is the CoM inertia tensor in base frame.
 
-% Formulation A: Using the skew-symmetric matrix S^T(r)*S(r)
-I_steiner_A = simplify(I_C + m * (s(r).' * s(r)));
+% CoM Inertia tensors rotated into base frame Sigma_0 (Slides 10, 15):
+I_l1_0 = simplify(R1 * I_l1_1 * R1.');
+I_l2_0 = simplify(R2 * I_l2_2 * R2.');
+I_l3_0 = simplify(R3 * I_l3_3 * R3.');
 
-% Formulation B: Using vector outer products (r^T*r*I - r*r^T)
-I_steiner_B = simplify(I_C + m * ((r.' * r)*eye(3) - (r * r.')));
+% Linear velocities of the CoMs
+dp_l1 = J_P_l1 * dq;
+dp_l2 = J_P_l2 * dq;
+dp_l3 = J_P_l3 * dq;
 
-% -------------------------------------------------------------------------
-% 2. Application to the Robot's Links (Links 1, 2, and 3)
-% Translating from link center of mass to link frame origin (r = comLocal{i})
-% -------------------------------------------------------------------------
-I_origin = cell(1, 3);
+% Angular velocities of the links
+omega_1 = J_O_l1 * dq;
+omega_2 = J_O_l2 * dq;
+omega_3 = J_O_l3 * dq;
 
-for i = 1:3
-    % r_i is the offset vector between the link frame origin and the CoM
-    r_i = comLocal{i}; 
-    m_i = linkMass(i);
-    I_Ci = inertiaLocal{i};
+% Translational kinetic energy of each link (Slide 7)
+T_l1_trans = simplify(1/2 * m_l1 * (dp_l1.' * dp_l1));
+T_l2_trans = simplify(1/2 * m_l2 * (dp_l2.' * dp_l2));
+T_l3_trans = simplify(1/2 * m_l3 * (dp_l3.' * dp_l3));
 
-    % Inertia tensor with respect to the link frame origin:
-    I_origin{i} = simplify(I_Ci + m_i * ((r_i.' * r_i)*eye(3) - (r_i * r_i.')));
+% Rotational kinetic energy of each link (Slide 10)
+T_l1_rot = simplify(1/2 * (omega_1.' * I_l1_0 * omega_1));
+T_l2_rot = simplify(1/2 * (omega_2.' * I_l2_0 * omega_2));
+T_l3_rot = simplify(1/2 * (omega_3.' * I_l3_0 * omega_3));
 
-    fprintf('Inertia tensor of Link %d about its frame origin (Steiner):\n', i);
-    disp(I_origin{i});
-end
+% Total kinetic energy of each link (Slide 16)
+T_l1 = simplify(T_l1_trans + T_l1_rot);
+T_l2 = simplify(T_l2_trans + T_l2_rot);
+T_l3 = simplify(T_l3_trans + T_l3_rot);
 
-% Verify equivalence of the two Steiner-theorem formulations.
-fprintf('\nSteiner formulation equivalence check (should be zero):\n');
-disp(simplify(I_steiner_A - I_steiner_B));
+% Total kinetic energy of the manipulator (Slide 18): T = sum_i T_li
+T_total = simplify(T_l1 + T_l2 + T_l3);
+
+% Manipulator Inertia Matrix B(q) (Slides 18-19, 22-23):
+% T = 1/2 * dq^T * B(q) * dq
+% B(q) = sum_i [ m_li * (J_P^li)^T * J_P^li + (J_O^li)^T * R_i * I_li^i * R_i^T * J_O^li ]
+B1 = simplify(m_l1 * (J_P_l1.' * J_P_l1) + J_O_l1.' * I_l1_0 * J_O_l1);
+B2 = simplify(m_l2 * (J_P_l2.' * J_P_l2) + J_O_l2.' * I_l2_0 * J_O_l2);
+B3 = simplify(m_l3 * (J_P_l3.' * J_P_l3) + J_O_l3.' * I_l3_0 * J_O_l3);
+
+B = simplify(B1 + B2 + B3);
+
+% Equivalent calculation from Hessian of kinetic energy:
+B_hessian = simplify(jacobian(jacobian(T_total, dq).', dq));
+
+fprintf('\n--- Kinetic Energy & Inertia Matrix B(q) (Slide 18) ---\n');
+fprintf('Total Kinetic Energy T(q, dq) [J]:\n'); disp(T_total);
+fprintf('Manipulator Inertia Matrix B(q):\n'); disp(B);
+
+% Checks on Kinetic Energy and Inertia Matrix:
+% Check 1: Symmetry B(q) = B^T(q) (Slide 19)
+sym_check = simplify(B - B.');
+fprintf('Inertia matrix symmetry check B - B^T (should be zero):\n');
+disp(sym_check);
+
+% Check 2: Quadratic form equivalence T = 1/2*dq'*B*dq (Slide 19)
+quad_check = simplify(T_total - 1/2*dq.'*B*dq);
+fprintf('Kinetic energy quadratic form check (should be zero):\n');
+disp(quad_check);
+
+% Check 3: Jacobian summation vs Hessian derivation
+hess_check = simplify(B - B_hessian);
+fprintf('Hessian vs Jacobian summation check (should be zero):\n');
+disp(hess_check);
+
+
+%% 6. Potential Energy - Manual (Slides 20-21)
+% Gravitational potential energy of link i (Slide 20):
+% U_li = - m_li * g0^T * p_li
+U_l1 = simplify(- m_l1 * (g0.' * p_l1));
+U_l2 = simplify(- m_l2 * (g0.' * p_l2));
+U_l3 = simplify(- m_l3 * (g0.' * p_l3));
+
+% Total gravitational potential energy (Slide 20): U = sum_i U_li
+U_total = simplify(U_l1 + U_l2 + U_l3);
+
+% Gravity generalized force vector g(q) = (dU/dq)^T (Slide 25)
+g1 = simplify(diff(U_total, q1));
+g2 = simplify(diff(U_total, q2));
+g3 = simplify(diff(U_total, q3));
+g_vec = [g1; g2; g3];
+
+% Alternative calculation from partial linear Jacobians (Slide 26):
+% g_i(q) = - sum_j m_lj * g0^T * j_Pi^lj(q)
+g1_J = simplify(- (m_l1*g0.'*J_P_l1(:,1) + m_l2*g0.'*J_P_l2(:,1) + m_l3*g0.'*J_P_l3(:,1)));
+g2_J = simplify(- (m_l1*g0.'*J_P_l1(:,2) + m_l2*g0.'*J_P_l2(:,2) + m_l3*g0.'*J_P_l3(:,2)));
+g3_J = simplify(- (m_l1*g0.'*J_P_l1(:,3) + m_l2*g0.'*J_P_l2(:,3) + m_l3*g0.'*J_P_l3(:,3)));
+g_vec_J = [g1_J; g2_J; g3_J];
+
+fprintf('\n--- Potential Energy & Gravity Vector g(q) (Slides 20, 25) ---\n');
+fprintf('Potential Energy of Link 1 U_l1 [J]:\n'); disp(U_l1);
+fprintf('Potential Energy of Link 2 U_l2 [J]:\n'); disp(U_l2);
+fprintf('Potential Energy of Link 3 U_l3 [J]:\n'); disp(U_l3);
+fprintf('Total Potential Energy U(q) [J]:\n');     disp(U_total);
+fprintf('Gravity Generalized Force Vector g(q):\n'); disp(g_vec);
+
+% Check on potential energy derivations:
+g_equiv_check = simplify(g_vec - g_vec_J);
+fprintf('Gravity vector equivalence check (g_from_U - g_from_J == 0):\n');
+disp(g_equiv_check);
