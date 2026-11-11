@@ -20,6 +20,8 @@ showdetails(robot);
 eeName = robot.BodyNames{end};
 baseName = robot.BaseName;
 
+%Change gravity
+
 % Fixed link analytical dimensions
 a1_a = 0.5;
 a2_a = 0.4;
@@ -392,6 +394,8 @@ else
     fprintf('GEOMETRIC JACOBIAN CROSS-CHECK: DIFFER\n');
 end
 
+%Check why differ
+
 
 %% Analytical Jacobian - Manual (ZYZ Euler angles)
 
@@ -595,6 +599,8 @@ for i = 1:3
     inertiaCOM_base{i} = simplify( ...
         R_base_link*inertiaLocal{i}*R_base_link.');
 
+    % USE STEINER MATRIX
+
     % Obtain COM linear and link angular velocities from the Jacobians.
     vCOM = Jv_COM{i}*dq;
     omegaLink = Jw_link{i}*dq;
@@ -644,6 +650,8 @@ disp(totalKineticEnergy);
 
 fprintf('Joint-space inertia matrix B(q):\n');
 disp(manipulatorInertiaMatrix);
+
+% Check why q1 and q2 are not present in B(q)
 
 % Checks: both expressions should simplify to zero.
 fprintf('\nInertia matrix symmetry check (should be zero):\n');
